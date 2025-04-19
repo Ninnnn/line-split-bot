@@ -90,9 +90,20 @@ def handle_message(event):
                     share[m] = share.get(m, 0) + split
 
             all_names = sorted(set(paid.keys()) | set(share.keys()))
-            lines = ["【分帳結算結果】"]
-            lines.append("姓名    實付     應付     差額")
-            lines.append("－" * 30)
+
+            # 顯示每筆紀錄
+            record_lines = ["【所有消費記錄】"]
+            for i, record in enumerate(session_data, start=1):
+                line = (
+                    f"{i}. {record['amount']} 元（{record['purpose']}）"
+                    f"由 {record['payer']} 付款，參與：{', '.join(record['members'])}"
+                )
+                record_lines.append(line)
+
+            # 顯示結算表格
+            summary_lines = ["【金錢統計】"]
+            summary_lines.append("姓名    實付     應付     差額")
+            summary_lines.append("－" * 30)
 
             for name in all_names:
                 actual = paid.get(name, 0)
@@ -105,9 +116,9 @@ def handle_message(event):
                 else:
                     status = "0（剛好）"
 
-                lines.append(f"{name:<6} {actual:>5.0f}元   {should:>5.0f}元   {status}")
+                summary_lines.append(f"{name:<6} {actual:>5.0f}元   {should:>5.0f}元   {status}")
 
-            reply = "\n".join(lines)
+            reply = "\n".join(["【分帳結算結果】"] + [""] + record_lines + [""] + summary_lines)
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
