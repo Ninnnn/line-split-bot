@@ -32,9 +32,10 @@ def handle_message(event):
         try:
             msg = text[2:].strip()
             main_part, payer = msg.split("/")
-            amount_str, *members = main_part.strip().split()
+            amount_str, purpose, *members = main_part.strip().split()
             amount = int(amount_str)
             payer = payer.strip()
+            purpose = purpose.strip()
             participants = [m.strip() for m in members if m.strip()]
             if not participants or payer not in participants:
                 raise ValueError("付款人必須包含在參與者中")
@@ -42,12 +43,14 @@ def handle_message(event):
             session_data.append({
                 "amount": amount,
                 "payer": payer,
+                "purpose": purpose,
                 "members": participants
             })
 
             reply_text = (
                 f"【記帳成功】\n"
                 f"金額：{amount} 元\n"
+                f"用途：{purpose}\n"
                 f"付款人：{payer}\n"
                 f"參與者：{', '.join(participants)}\n\n"
                 f"你可以繼續輸入「記帳」或輸入「結算」來計算總表"
@@ -62,10 +65,10 @@ def handle_message(event):
                 event.reply_token,
                 TextSendMessage(text=(
                     "【記帳格式錯誤】\n"
-                    "請使用以下格式：\n\n"
-                    "記帳 金額 名單 / 付款人\n"
+                    "請使用以下格式（用途必填）：\n\n"
+                    "記帳 金額 用途 名單 / 付款人\n"
                     "範例：\n"
-                    "記帳 600 小明 小美 小王 / 小明"
+                    "記帳 600 晚餐 小明 小美 小王 / 小明"
                 ))
             )
 
@@ -108,11 +111,11 @@ def handle_message(event):
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
-    elif text == "重設":
+    elif text in ["重設", "重啟"]:
         session_data.clear()
         line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text="【已重設】\n所有記帳資料已清空，可重新開始記帳。")
+            TextSendMessage(text="【已清空】\n所有記帳資料已重設，可重新開始記帳。")
         )
 
     else:
@@ -121,9 +124,9 @@ def handle_message(event):
             TextSendMessage(text=(
                 "【指令說明】\n"
                 "你可以使用以下指令：\n\n"
-                "1. 記帳 金額 名單 / 付款人\n"
-                "   例如：記帳 600 小明 小美 / 小明\n\n"
+                "1. 記帳 金額 用途 名單 / 付款人\n"
+                "   例如：記帳 600 晚餐 小明 小美 / 小明\n\n"
                 "2. 結算（統計誰多付、誰該補）\n"
-                "3. 重設（清空所有記帳資料）"
+                "3. 重設 或 重啟（清空所有記帳資料）"
             ))
         )
