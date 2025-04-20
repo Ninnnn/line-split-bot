@@ -36,5 +36,12 @@ def append_personal_record(user_id, amount, note, date):
 def get_personal_records_by_name(user_id):
     sheet = spreadsheet.worksheet("personal_records")
     all_records = sheet.get_all_records()
-    # 根據 user_id 查找該使用者的所有記錄
     return [r for r in all_records if str(r["User ID"]) == str(user_id)]  # 假設 "User ID" 是記錄的欄位名稱
+
+def reset_personal_record_by_name(user_id):
+    sheet = spreadsheet.worksheet("personal_records")
+    all_records = sheet.get_all_records()
+    # 查找並刪除對應 user_id 的所有記錄
+    for i, record in enumerate(all_records, start=2):  # 假設資料從第二行開始
+        if str(record["User ID"]) == str(user_id):  # 假設 "User ID" 是記錄的欄位名稱
+            sheet.delete_row(i)  # 刪除該行
