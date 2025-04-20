@@ -10,7 +10,7 @@ app = Flask(__name__)
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 記憶體儲存
+# 儲存資料
 session_data = []
 personal_data = {}
 
@@ -29,8 +29,8 @@ def callback():
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     text = event.message.text.strip()
-
-    # --- 均分制記帳 ---
+    today_str = datetime.now().strftime("%Y/%m/%d")
+        # 均分制記帳
     if text.startswith("記帳 "):
         try:
             msg = text[2:].strip()
@@ -48,7 +48,8 @@ def handle_message(event):
                 "amount": amount,
                 "purpose": purpose,
                 "payer": payer,
-                "members": participants
+                "members": participants,
+                "date": today_str
             })
 
             reply_text = (
@@ -56,9 +57,9 @@ def handle_message(event):
                 f"金額：{amount} 元\n"
                 f"用途：{purpose}\n"
                 f"付款人：{payer}\n"
-                f"參與者：{', '.join(participants)}"
+                f"參與者：{', '.join(participants)}\n"
+                f"日期：{today_str}"
             )
-
         except:
             reply_text = (
                 "【記帳格式錯誤】\n"
@@ -67,7 +68,7 @@ def handle_message(event):
             )
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
-    # --- 個別金額記帳 ---
+    # 個別金額記帳
     elif text.startswith("記帳詳細"):
         try:
             msg = text[5:].strip()
@@ -89,34 +90,37 @@ def handle_message(event):
                 "type": "individual",
                 "purpose": purpose,
                 "payer": payer,
-                "member_amounts": member_amounts
+                "member_amounts": member_amounts,
+                "date": today_str
             })
 
             reply = (
                 f"【記帳成功｜個別金額】\n"
                 f"用途：{purpose}\n"
                 f"付款人：{payer}\n"
+                f"日期：{today_str}\n"
                 + "\n".join([f"{name}：{amt} 元" for name, amt in member_amounts.items()])
             )
 
         except:
             reply = (
                 "【記帳詳細格式錯誤】\n"
-                "請使用：\n記帳詳細 用途 名:金額 名:金額... / 付款人\n"
+                "請使用：\n記帳詳細 用途 姓名:金額 姓名:金額... / 付款人\n"
                 "範例：\n記帳詳細 晚餐 小明:300 小美:250 / 小明"
             )
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
-    # --- 結算 ---
+    # 結算
     elif text == "結算":
         if not session_data:
             reply = "目前沒有任何記帳紀錄，請先輸入「記帳」或「記帳詳細」。"
         else:
             paid = {}
             share = {}
-            lines = ["【所有消費記錄】"]
+            lines = [f"【結算日期】：{today_str}"]
 
             for i, record in enumerate(session_data, start=1):
+                record_date = record.get("date", "未知")
                 if record["type"] == "split":
                     amt = record["amount"]
                     payer = record["payer"]
@@ -127,7 +131,7 @@ def handle_message(event):
                     for m in members:
                         share[m] = share.get(m, 0) + per_person
 
-                    lines.append(f"{i}. {amt} 元（{record['purpose']}），{payer} 付款，參與：{', '.join(members)}")
+                    lines.append(f"{i}. [{record_date}] {amt} 元（{record['purpose']}），{payer} 付款，參與：{', '.join(members)}")
 
                 elif record["type"] == "individual":
                     payer = record["payer"]
@@ -139,7 +143,7 @@ def handle_message(event):
                         share[m] = share.get(m, 0) + amt
 
                     detail = "，".join([f"{k}:{v}" for k, v in member_amounts.items()])
-                    lines.append(f"{i}. {total_amt} 元（{record['purpose']}），{payer} 付款，{detail}")
+                    lines.append(f"{i}. [{record_date}] {total_amt} 元（{record['purpose']}），{payer} 付款，{detail}")
 
             summary_lines = ["", "【金錢統計】", "姓名    實付     應付     差額", "－" * 30]
             names = sorted(set(paid) | set(share))
@@ -158,13 +162,13 @@ def handle_message(event):
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
-    # --- 重設全部資料 ---
+    # 重設全部
     elif text in ["重設", "重啟"]:
         session_data.clear()
         personal_data.clear()
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="【已清空】\n所有記帳資料已重設，可重新開始記帳。"))
 
-    # --- 個人記帳 ---
+    # 個人記帳
     elif text.startswith("個人記帳"):
         try:
             msg = text[4:].strip()
@@ -173,13 +177,12 @@ def handle_message(event):
             amount = int(amount_str)
             person = person.strip()
             purpose = purpose.strip()
-            date_str = datetime.now().strftime("%Y/%m/%d")
 
             if person not in personal_data:
                 personal_data[person] = []
 
             personal_data[person].append({
-                "date": date_str,
+                "date": today_str,
                 "amount": amount,
                 "purpose": purpose
             })
@@ -187,7 +190,7 @@ def handle_message(event):
             reply = (
                 f"【個人記帳成功】\n"
                 f"{person} 登記了 {amount} 元（{purpose}）\n"
-                f"日期：{date_str}"
+                f"日期：{today_str}"
             )
 
         except:
@@ -199,17 +202,16 @@ def handle_message(event):
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
-    # --- 查詢個人記帳 ---
+    # 查詢個人
     elif text.startswith("查詢個人"):
         name = text[5:].strip()
-        today = datetime.now().strftime("%Y/%m/%d")
         records = personal_data.get(name)
 
         if not records:
-            reply = f"【查詢日期】：{today}\n{name} 尚未有個人記帳紀錄。"
+            reply = f"【查詢日期】：{today_str}\n{name} 尚未有個人記帳紀錄。"
         else:
             total = sum(r["amount"] for r in records)
-            lines = [f"【查詢日期】：{today}", f"【{name}的個人記帳紀錄】"]
+            lines = [f"【查詢日期】：{today_str}", f"【{name}的個人記帳紀錄】"]
             for i, r in enumerate(records, start=1):
                 lines.append(f"{i}. {r['date']} {r['purpose']} {r['amount']} 元")
             lines.append(f"\n總消費：{total} 元")
@@ -217,7 +219,7 @@ def handle_message(event):
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
-    # --- 重設個人記帳 ---
+    # 重設個人
     elif text.startswith("重設個人"):
         name = text[5:].strip()
         if name in personal_data:
@@ -227,7 +229,7 @@ def handle_message(event):
             reply = f"{name} 尚無個人記帳資料，無需清除。"
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
-    # --- 指令說明 ---
+    # 指令說明
     else:
         reply = (
             "【指令說明】\n"
