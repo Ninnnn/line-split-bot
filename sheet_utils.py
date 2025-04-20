@@ -31,4 +31,9 @@ def append_personal_record(user_id, amount, note, date):
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         user_id, str(amount),
         note, date
+        
+def get_personal_records_by_user(user_id):
+    sheet = spreadsheet.worksheet("personal_records")
+    all_records = sheet.get_all_records()
+    return [r for r in all_records if str(r["user_id"]) == str(user_id)]        
     ])
