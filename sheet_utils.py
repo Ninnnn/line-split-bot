@@ -13,7 +13,7 @@ credentials_dict = json.loads(json_str)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
 client = gspread.authorize(creds)
 
-# 開啟 Google Sheet，名稱請改為你自己建立的試算表名稱
+# 開啟 Google Sheet，名稱請改為你自己的試算表名稱
 spreadsheet = client.open("SplitBotData")
 
 def append_group_record(who, amount, members, note, date):
@@ -21,7 +21,7 @@ def append_group_record(who, amount, members, note, date):
     sheet.append_row([
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         who, str(amount),
-        ",".join(members),  # 成員列表
+        ",".join(members),
         note, date
     ])
 
@@ -33,15 +33,21 @@ def append_personal_record(user_id, name, amount, note, date):
         note, date
     ])
 
-def get_personal_records_by_user(user_id):
+def get_personal_records_by_user(name):
     sheet = spreadsheet.worksheet("personal_records")
     all_records = sheet.get_all_records()
-    return [r for r in all_records if str(r["user_id"]) == str(user_id)]
+    return [r for r in all_records if r["name"] == name]
 
-def reset_personal_record_by_name(user_id):
+def reset_personal_record_by_name(name):
     sheet = spreadsheet.worksheet("personal_records")
-    all_records = sheet.get_all_records()
-    records_to_delete = [r for r in all_records if str(r["user_id"]) == str(user_id)]
-    for record in records_to_delete:
-        cell = sheet.find(str(record['user_id']))
-        sheet.delete_row(cell.row)
+    all_records = sheet.get_all_values()
+    headers = all_records[0]
+    name_index = headers.index("name")
+    
+    rows_to_keep = [row for row in all_records if row[name_index] != name]
+    
+    # 清空原本資料並重寫
+    sheet.clear()
+    sheet.append_row(headers)
+    for row in rows_to_keep[1:]:
+        sheet.append_row(row)
