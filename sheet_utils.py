@@ -25,23 +25,23 @@ def append_group_record(who, amount, members, note, date):
         note, date
     ])
 
-def append_personal_record(user_id, amount, note, date):
+def append_personal_record(user_id, name, amount, note, date):
     sheet = spreadsheet.worksheet("personal_records")
     sheet.append_row([
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        user_id, str(amount),
+        user_id, name, str(amount),
         note, date
     ])
 
-def get_personal_records_by_name(user_id):
+def get_personal_records_by_user(user_id):
     sheet = spreadsheet.worksheet("personal_records")
     all_records = sheet.get_all_records()
-    return [r for r in all_records if str(r["User ID"]) == str(user_id)]  # 假設 "User ID" 是記錄的欄位名稱
+    return [r for r in all_records if str(r["user_id"]) == str(user_id)]
 
 def reset_personal_record_by_name(user_id):
     sheet = spreadsheet.worksheet("personal_records")
     all_records = sheet.get_all_records()
-    # 查找並刪除對應 user_id 的所有記錄
-    for i, record in enumerate(all_records, start=2):  # 假設資料從第二行開始
-        if str(record["User ID"]) == str(user_id):  # 假設 "User ID" 是記錄的欄位名稱
-            sheet.delete_row(i)  # 刪除該行
+    records_to_delete = [r for r in all_records if str(r["user_id"]) == str(user_id)]
+    for record in records_to_delete:
+        cell = sheet.find(str(record['user_id']))
+        sheet.delete_row(cell.row)
