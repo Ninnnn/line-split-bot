@@ -10,7 +10,7 @@ app = Flask(__name__)
 line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 分帳與個人記帳資料（記憶體儲存）
+# 記憶體儲存
 session_data = []
 personal_data = {}
 
@@ -30,8 +30,8 @@ def callback():
 def handle_message(event):
     text = event.message.text.strip()
 
-    # --- 團體記帳 ---
-    if text.startswith("記帳"):
+    # --- 均分制記帳 ---
+    if text.startswith("記帳 "):
         try:
             msg = text[2:].strip()
             main_part, payer = msg.split("/")
@@ -44,9 +44,10 @@ def handle_message(event):
                 raise ValueError("付款人必須包含在參與者中")
 
             session_data.append({
+                "type": "split",
                 "amount": amount,
-                "payer": payer,
                 "purpose": purpose,
+                "payer": payer,
                 "members": participants
             })
 
@@ -55,8 +56,7 @@ def handle_message(event):
                 f"金額：{amount} 元\n"
                 f"用途：{purpose}\n"
                 f"付款人：{payer}\n"
-                f"參與者：{', '.join(participants)}\n\n"
-                f"你可以繼續輸入「記帳」或輸入「結算」來計算總表"
+                f"參與者：{', '.join(participants)}"
             )
 
         except:
@@ -67,48 +67,94 @@ def handle_message(event):
             )
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
 
-    # --- 團體結算 ---
+    # --- 個別金額記帳 ---
+    elif text.startswith("記帳詳細"):
+        try:
+            msg = text[5:].strip()
+            main_part, payer = msg.split("/")
+            parts = main_part.strip().split()
+            purpose = parts[0]
+            payer = payer.strip()
+            people = parts[1:]
+
+            member_amounts = {}
+            for p in people:
+                name, amt = p.split(":")
+                member_amounts[name.strip()] = int(amt)
+
+            if payer not in member_amounts:
+                raise ValueError("付款人必須包含在參與者中")
+
+            session_data.append({
+                "type": "individual",
+                "purpose": purpose,
+                "payer": payer,
+                "member_amounts": member_amounts
+            })
+
+            reply = (
+                f"【記帳成功｜個別金額】\n"
+                f"用途：{purpose}\n"
+                f"付款人：{payer}\n"
+                + "\n".join([f"{name}：{amt} 元" for name, amt in member_amounts.items()])
+            )
+
+        except:
+            reply = (
+                "【記帳詳細格式錯誤】\n"
+                "請使用：\n記帳詳細 用途 名:金額 名:金額... / 付款人\n"
+                "範例：\n記帳詳細 晚餐 小明:300 小美:250 / 小明"
+            )
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
+
+    # --- 結算 ---
     elif text == "結算":
         if not session_data:
-            reply = "目前沒有任何記帳紀錄，請先輸入「記帳」開始。"
+            reply = "目前沒有任何記帳紀錄，請先輸入「記帳」或「記帳詳細」。"
         else:
             paid = {}
             share = {}
+            lines = ["【所有消費記錄】"]
 
-            for record in session_data:
-                amt = record["amount"]
-                payer = record["payer"]
-                members = record["members"]
-                split = amt / len(members)
-
-                paid[payer] = paid.get(payer, 0) + amt
-                for m in members:
-                    share[m] = share.get(m, 0) + split
-
-            all_names = sorted(set(paid.keys()) | set(share.keys()))
-
-            record_lines = ["【所有消費記錄】"]
             for i, record in enumerate(session_data, start=1):
-                line = (
-                    f"{i}. {record['amount']} 元（{record['purpose']}）"
-                    f"由 {record['payer']} 付款，參與：{', '.join(record['members'])}"
+                if record["type"] == "split":
+                    amt = record["amount"]
+                    payer = record["payer"]
+                    members = record["members"]
+                    per_person = amt / len(members)
+
+                    paid[payer] = paid.get(payer, 0) + amt
+                    for m in members:
+                        share[m] = share.get(m, 0) + per_person
+
+                    lines.append(f"{i}. {amt} 元（{record['purpose']}），{payer} 付款，參與：{', '.join(members)}")
+
+                elif record["type"] == "individual":
+                    payer = record["payer"]
+                    member_amounts = record["member_amounts"]
+                    total_amt = sum(member_amounts.values())
+
+                    paid[payer] = paid.get(payer, 0) + total_amt
+                    for m, amt in member_amounts.items():
+                        share[m] = share.get(m, 0) + amt
+
+                    detail = "，".join([f"{k}:{v}" for k, v in member_amounts.items()])
+                    lines.append(f"{i}. {total_amt} 元（{record['purpose']}），{payer} 付款，{detail}")
+
+            summary_lines = ["", "【金錢統計】", "姓名    實付     應付     差額", "－" * 30]
+            names = sorted(set(paid) | set(share))
+            for name in names:
+                p = paid.get(name, 0)
+                s = share.get(name, 0)
+                diff = p - s
+                status = (
+                    f"+{diff:.0f}（多付）" if diff > 0 else
+                    f"{diff:.0f}（需補）" if diff < 0 else
+                    "0（剛好）"
                 )
-                record_lines.append(line)
+                summary_lines.append(f"{name:<6} {p:>5.0f}元   {s:>5.0f}元   {status}")
 
-            summary_lines = ["【金錢統計】", "姓名    實付     應付     差額", "－" * 30]
-            for name in all_names:
-                actual = paid.get(name, 0)
-                should = share.get(name, 0)
-                diff = actual - should
-                if diff > 0:
-                    status = f"+{diff:.0f}（多付）"
-                elif diff < 0:
-                    status = f"{diff:.0f}（需補）"
-                else:
-                    status = "0（剛好）"
-                summary_lines.append(f"{name:<6} {actual:>5.0f}元   {should:>5.0f}元   {status}")
-
-            reply = "\n".join(["【分帳結算結果】", ""] + record_lines + [""] + summary_lines)
+            reply = "\n".join(lines + summary_lines)
 
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
 
@@ -187,8 +233,10 @@ def handle_message(event):
             "【指令說明】\n"
             "● 記帳 金額 用途 名單 / 付款人\n"
             "  例：記帳 300 晚餐 小明 小美 / 小明\n"
-            "● 結算：統計所有人分帳結果\n"
-            "● 重設：清空所有資料\n\n"
+            "● 記帳詳細 用途 姓名:金額 姓名:金額 / 付款人\n"
+            "  例：記帳詳細 晚餐 小明:300 小美:250 / 小明\n"
+            "● 結算：計算所有人分帳結果\n"
+            "● 重設：清空所有記帳資料\n\n"
             "【個人記帳】\n"
             "● 個人記帳 金額 用途 / 姓名\n"
             "  例：個人記帳 150 早餐 / 小明\n"
