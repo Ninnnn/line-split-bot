@@ -13,7 +13,7 @@ credentials_dict = json.loads(json_str)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(credentials_dict, scope)
 client = gspread.authorize(creds)
 
-# 開啟 Google Sheet，名稱請改為你自己建立的試算表名稱
+# 開啟 Google Sheet，名稱請改為你建立的試算表名稱
 spreadsheet = client.open("SplitBotData")
 
 def append_group_record(who, amount, members, note, date):
@@ -21,7 +21,7 @@ def append_group_record(who, amount, members, note, date):
     sheet.append_row([
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         who, str(amount),
-        ",".join(members),  # 成員列表
+        ",".join(members),
         note, date
     ])
 
@@ -31,9 +31,9 @@ def append_personal_record(user_id, amount, note, date):
         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         user_id, str(amount),
         note, date
-        
+    ])
+
 def get_personal_records_by_user(user_id):
     sheet = spreadsheet.worksheet("personal_records")
     all_records = sheet.get_all_records()
-    return [r for r in all_records if str(r["user_id"]) == str(user_id)]        
-    ])
+    return [r for r in all_records if str(r["user_id"]) == str(user_id)]
