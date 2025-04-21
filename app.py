@@ -5,6 +5,9 @@ from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
 from datetime import datetime
+from google.cloud import vision
+from google.cloud.vision import types
+from io import BytesIO
 
 from sheet_utils import (
     append_group_record,
@@ -16,6 +19,15 @@ from sheet_utils import (
 app = Flask(__name__)
 line_bot_api = LineBotApi(os.environ.get("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.environ.get("LINE_CHANNEL_SECRET"))
+
+# Google Vision 客戶端初始化
+client = vision.ImageAnnotatorClient()
+
+def detect_text_from_image(image_bytes):
+    image = types.Image(content=image_bytes)
+    response = client.text_detection(image=image)
+    texts = response.text_annotations
+    return texts
 
 group_records = []
 personal_records = {}
@@ -165,8 +177,37 @@ def handle_message(event):
         except Exception as e:
             msg = "重設失敗，請確認輸入格式與名稱"
 
+    elif msg.startswith("發票記帳"):
+        # 取得圖片並解析文字
+        if event.message.type == "image":
+            message_content = line_bot_api.get_message_content(event.message.id)
+            image_bytes = BytesIO(message_content.content)
+            texts = detect_text_from_image(image_bytes)
+
+            # 抽取發票內容（簡化範例，假設文字為金額與品項）
+            invoice_text = texts[0].description
+            print("發票內容：", invoice_text)
+
+            # 解析金額與品項，這裡是示範邏輯，可以根據需求進一步處理
+            amounts = [int(amount) for amount in invoice_text.split() if amount.isdigit()]
+
+            # 以金額分配品項，並提示使用者選擇對應的人
+            msg = "發票金額已識別，請輸入指令來選擇分配給誰。"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=msg))
+
+    elif msg.startswith("個人發票記帳"):
+        name = msg.split()[1]  # 取得名稱（如：小美）
+        amounts = [40, 60]  # 假設從 OCR 識別到的金額
+        note = "發票消費"
+        date = datetime.now().strftime("%Y-%m-%d")
+        
+        # 記錄發票金額到個人記帳
+        for amount in amounts:
+            append_personal_record(user_id, name, amount, note, date)
+        msg = f"{name}的發票記錄已完成。"
+
     else:
-        msg = "請輸入指令，例如：\n- 記帳 張三 300 張三,李四 晚餐 2025-04-20\n- 記帳 張三 張三:100,李四:200 晚餐 2025-04-20\n- 查帳\n- 個人記帳 150 便當/寧 2025-04-20\n- 查詢個人 寧\n- 重設個人 寧\n- 重啟"
+        msg = "請輸入指令，例如：\n- 記帳 張三 300 張三,李四 晚餐 2025-04-20\n- 查帳\n- 個人記帳 150 便當/寧 2025-04-20\n- 查詢個人 寧\n- 重設個人 寧\n- 發票記帳"
 
     line_bot_api.reply_message(
         event.reply_token,
