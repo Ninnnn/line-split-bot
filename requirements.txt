@@ -3,3 +3,4 @@ line-bot-sdk
 gunicorn
 gspread
 oauth2client
+google-cloud-vision
