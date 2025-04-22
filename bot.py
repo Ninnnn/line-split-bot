@@ -1,8 +1,9 @@
 import os
 from linebot import LineBotApi, WebhookHandler
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
+from commands import process_command  # 假設你有 commands.py 處理所有指令
 
-# 環境變數取得你的 LINE channel token 和 secret
+# 取得環境變數
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
@@ -14,9 +15,10 @@ def handle_message(event):
     user_id = event.source.user_id
     user_message = event.message.text
 
-    # 回覆相同訊息（可改為你的功能處理邏輯）
-    reply_text = f"你說的是：{user_message}"
+    # 使用 command 處理模組
+    reply_text = process_command(user_id, user_message)
 
+    # 回傳訊息
     line_bot_api.reply_message(
         event.reply_token,
         TextSendMessage(text=reply_text)
