@@ -1,3 +1,4 @@
+import os
 from linebot import LineBotApi, WebhookHandler
 from linebot.models import *
 from flask import abort
