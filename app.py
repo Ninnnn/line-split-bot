@@ -1,20 +1,27 @@
 from flask import Flask, request, abort
-from bot import handler  # 從 bot 匯入 handler 物件
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import *
+import os
+
+from bot import handler
 
 app = Flask(__name__)
 
-@app.route("/callback", methods=["POST"])
+line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
+
+@app.route("/callback", methods=['POST'])
 def callback():
-    signature = request.headers["X-Line-Signature"]
+    signature = request.headers['X-Line-Signature']
     body = request.get_data(as_text=True)
 
     try:
         handler.handle(body, signature)
-    except Exception as e:
-        print(f"LINE webhook error: {e}")
+    except InvalidSignatureError:
         abort(400)
 
-    return "OK"
+    return 'OK'
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
