@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage
-from sheet_utils import append_group_record, append_personal_record, get_personal_records_by_user, reset_personal_record_by_name
+from sheet_utils import append_record, get_personal_records_by_user, reset_personal_record_by_name
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -43,7 +43,7 @@ def add_group_record():
         "participants": data.get("participants"),
         "date": data.get("date")
     }
-    append_group_record(record)
+    append_record('group_records', record)  # 使用 'group_records' 作為工作表名稱
     return jsonify({"message": "Group record added successfully!"}), 200
 
 # 範例：新增個人記帳
@@ -56,7 +56,7 @@ def add_personal_record():
         "name": data.get("name"),
         "date": data.get("date")
     }
-    append_personal_record(record)
+    append_record('personal_records', record)  # 使用 'personal_records' 作為工作表名稱
     return jsonify({"message": "Personal record added successfully!"}), 200
 
 # 當作 WSGI 應用運行
