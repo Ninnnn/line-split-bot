@@ -3,7 +3,7 @@ from flask import Flask, request, jsonify
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage
-from sheet_utils import append_record, get_personal_records_by_user, reset_personal_record_by_name
+from sheet_utils import append_record, get_personal_records, reset_personal_record_by_name
 
 # 初始化 Flask 應用
 app = Flask(__name__)
@@ -27,7 +27,7 @@ def callback():
 # 範例：查詢個人記帳
 @app.route("/check_personal_records/<name>", methods=["GET"])
 def check_personal_records(name):
-    records = get_personal_records_by_user(name)
+    records = get_personal_records(name)  # 修改為 get_personal_records
     if records:
         return jsonify(records)
     else:
