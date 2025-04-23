@@ -19,7 +19,14 @@ def append_personal_record(name, item, amount, date, invoice_number=""):
 def get_personal_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
-    return df[df["姓名"] == name]
+    user_records = df[df["姓名"] == name]
+    total_amount = user_records["金額"].sum() if not user_records.empty else 0
+    return user_records.to_string(index=False), total_amount
+
+def get_all_personal_records_by_user():
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
+    records = sheet.get_all_records()
+    return records
 
 def reset_personal_record_by_name(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
