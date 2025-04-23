@@ -48,22 +48,24 @@ def handle_message(event):
             parts = text[3:].split()
             user = parts[0]
             amount = int(parts[1])
-            date = parts[2] if len(parts) > 2 else None
-            append_personal_record(user, amount, date)
+            date = parts[2] if len(parts) > 2 else ""
+            append_personal_record([user, amount, date])
             reply = f"{user} 已記帳 {amount} 元"
         except Exception as e:
             reply = f"記帳失敗：{e}"
 
     elif text.startswith("查詢個人記帳 "):
-        user = text[7:]
-        records, total = get_personal_records_by_user(user)
+        user = text[8:]
+        records = get_personal_records_by_user(user)
         if records:
-            reply = "\n".join(records) + f"\n總共：{total} 元"
+            total = sum(int(r["amount"]) for r in records)
+            lines = [f"{r['date']} - {r['amount']}" for r in records]
+            reply = "\n".join(lines) + f"\n總共：{total} 元"
         else:
             reply = "查無紀錄"
 
     elif text.startswith("重設個人記帳 "):
-        user = text[7:]
+        user = text[8:]
         reset_personal_record_by_name(user)
         reply = f"{user} 的個人記帳已重設"
 
@@ -72,20 +74,24 @@ def handle_message(event):
             group_items = text[3:].split()
             for item in group_items:
                 name, amount = item.split(":")
-                append_group_record(name, int(amount))
+                append_group_record([name, int(amount)])
             reply = "分帳完成"
         except Exception as e:
             reply = f"分帳失敗：{e}"
 
     elif text.startswith("查詢團體記帳"):
         records = get_all_group_records()
-        reply = "\n".join(records) if records else "查無團體紀錄"
+        if records:
+            lines = [f"{r['date']} {r['name']} - {r['amount']}元" for r in records]
+            reply = "\n".join(lines)
+        else:
+            reply = "查無團體紀錄"
 
     elif text.startswith("刪除個人記帳 "):
         name = text[8:]
         records = get_all_personal_records_by_user(name)
         if records:
-            lines = [f"{idx+1}. {r}" for idx, r in enumerate(records)]
+            lines = [f"{idx+1}. {r['date']} {r['item']} - {r['amount']}元" for idx, r in enumerate(records)]
             reply = f"{name} 的個人記帳紀錄如下，請回覆『刪除 1』或『刪除 1,2』：\n" + "\n".join(lines)
         else:
             reply = "查無紀錄"
@@ -93,7 +99,7 @@ def handle_message(event):
     elif text.startswith("刪除團體記帳"):
         records = get_all_group_records()
         if records:
-            lines = [f"{idx+1}. {r}" for idx, r in enumerate(records)]
+            lines = [f"{idx+1}. {r['date']} {r['name']} - {r['amount']}元" for idx, r in enumerate(records)]
             reply = f"團體記帳如下，請回覆『刪除 1』或『刪除 1,2』：\n" + "\n".join(lines)
         else:
             reply = "查無紀錄"
@@ -109,10 +115,18 @@ def handle_message(event):
 
     elif text.startswith("查詢中獎"):
         try:
+            parts = text.split()
             user = None
-            if len(text) > 4:
-                user = text[5:]
-            reply = get_invoice_lottery_results(user)
+            month = None
+            if len(parts) >= 2:
+                if "/" in parts[1]:
+                    month = parts[1]
+                else:
+                    user = parts[1]
+            if len(parts) == 3:
+                user = parts[1]
+                month = parts[2]
+            reply = get_invoice_lottery_results(user, month)
         except Exception as e:
             reply = f"中獎查詢失敗：{e}"
 
