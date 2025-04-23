@@ -1,83 +1,44 @@
-import os
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
-from google.cloud import vision
-import io
 import pandas as pd
+from datetime import datetime
 
-# Google Sheets Authentication
-def authenticate_google_sheets():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name('path_to_credentials.json', scope)
-    client = gspread.authorize(creds)
-    return client
+# Google Sheets 授權
+scope = ['https://spreadsheets.google.com/feeds',
+         'https://www.googleapis.com/auth/drive']
+credentials = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
+client = gspread.authorize(credentials)
 
-# Google Vision API OCR
-def extract_text_from_image(image_path):
-    client = vision.ImageAnnotatorClient()
-    with io.open(image_path, 'rb') as image_file:
-        content = image_file.read()
-    image = vision.Image(content=content)
-    response = client.text_detection(image=image)
-    texts = response.text_annotations
-    if texts:
-        return texts[0].description
-    return ""
+SPREADSHEET_ID = '你的 Google Sheet ID'
 
-# Append records
-def append_group_record(record):
-    client = authenticate_google_sheets()
-    sheet = client.open("Expense Records").worksheet("group_records")
-    sheet.append_row(record)
+# ===== 個人記帳 =====
+def append_personal_record(name, item, amount, date, invoice_number=""):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
+    sheet.append_row([name, item, amount, date, invoice_number])
 
-def append_personal_record(record):
-    client = authenticate_google_sheets()
-    sheet = client.open("Expense Records").worksheet("personal_records")
-    sheet.append_row(record)
-
-# Get personal records by user
 def get_personal_records_by_user(name):
-    client = authenticate_google_sheets()
-    sheet = client.open("Expense Records").worksheet("personal_records")
-    records = sheet.get_all_records()
-    return [record for record in records if record.get("name") == name]
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
+    df = pd.DataFrame(sheet.get_all_records())
+    return df[df["姓名"] == name]
 
-# Get all records by user
-def get_all_personal_records_by_user(name):
-    return get_personal_records_by_user(name)
-
-# Reset records
 def reset_personal_record_by_name(name):
-    client = authenticate_google_sheets()
-    sheet = client.open("Expense Records").worksheet("personal_records")
-    all_records = sheet.get_all_records()
-    rows_to_keep = [i+2 for i, r in enumerate(all_records) if r.get("name") != name]
-    all_rows = list(range(2, len(all_records)+2))
-    rows_to_delete = sorted(set(all_rows) - set(rows_to_keep), reverse=True)
-    for row in rows_to_delete:
-        sheet.delete_rows(row)
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
+    records = sheet.get_all_values()
+    headers = records[0]
+    filtered = [row for row in records[1:] if row[0] != name]
+    sheet.clear()
+    sheet.append_row(headers)
+    for row in filtered:
+        sheet.append_row(row)
 
-# Delete record by index
-def delete_record(sheet_name, index_list):
-    client = authenticate_google_sheets()
-    sheet = client.open("Expense Records").worksheet(sheet_name)
-    for index in sorted(index_list, reverse=True):
-        sheet.delete_rows(index)
+# ===== 群組記帳 =====
+def append_group_record(payer, participants, item, amount, date, invoice_number=""):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
+    sheet.append_row([payer, participants, item, amount, date, invoice_number])
 
-# Export to Excel
-def export_records_to_excel(sheet_name, filename):
-    client = authenticate_google_sheets()
-    sheet = client.open("Expense Records").worksheet(sheet_name)
-    data = sheet.get_all_records()
-    df = pd.DataFrame(data)
-    df.to_excel(filename, index=False)
-    return filename
+def get_all_group_records():
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
+    records = sheet.get_all_records()
+    return records
 
-# 發票中獎對獎功能
-def check_invoice_lottery(invoice_numbers, winning_numbers):
-    result = []
-    for inv in invoice_numbers:
-        matched = any(inv.endswith(w) for w in winning_numbers)
-        result.append((inv, "中獎" if matched else "未中獎"))
-    return result
+# ===== 其他功能例如：刪除記錄、查詢中獎等可依需求擴充 =====
