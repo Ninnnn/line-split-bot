@@ -61,3 +61,23 @@ def delete_personal_record():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+@app.route("/commands", methods=["GET"])
+def list_commands():
+    return jsonify({
+        "指令列表": [
+            "個人記帳 小明 早餐 60",
+            "查詢記帳 小明",
+            "重設記帳 小明",
+            "團體記帳 早餐 小明:60 小美:40",
+            "發票記帳 小明:60 小美:40",
+            "個人發票記帳 小明",
+            "查詢中獎",
+            "查詢中獎 小明",
+            "查詢中獎 2025/03-04",
+            "刪除個人記帳 小明",
+            "刪除 1",
+            "匯出 小明",
+        ]
+    })
+
