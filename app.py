@@ -15,7 +15,8 @@ from sheet_utils import (
     get_invoice_lottery_results,
 )
 
-from vision_utils import ocr_invoice_image
+from vision_utils import extract_and_process_invoice
+
 
 import os
 from datetime import datetime
