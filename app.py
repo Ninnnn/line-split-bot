@@ -164,14 +164,17 @@ def handle_image_message(event):
     try:
         message_id = event.message.id
         image_content = line_bot_api.get_message_content(message_id).content
-        with open("/tmp/invoice.jpg", "wb") as f:
+        temp_path = "/tmp/invoice.jpg"
+        with open(temp_path, "wb") as f:
             f.write(image_content)
 
-        ocr_data = ocr_invoice_image("/tmp/invoice.jpg")
-        if not ocr_data:
-            reply = "❗ 無法讀取發票內容，請重新拍攝。"
+        invoice_data = extract_and_process_invoice(temp_path)
+        if isinstance(invoice_data, str):
+            reply = invoice_data  # 錯誤訊息
         else:
-            reply = "📄 發票擷取成功！請輸入：\n個人記帳 小明"
+            # 成功擷取，提示使用者記帳
+            reply = f"📄 發票擷取成功！\n發票號碼：{invoice_data['invoice_number']}\n總金額：{invoice_data['total']}元\n請輸入：個人記帳 小明"
+
     except Exception as e:
         reply = f"❌ 圖片處理失敗：{e}"
 
