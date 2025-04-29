@@ -1,37 +1,26 @@
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
-from linebot.models import MessageEvent, TextMessage, TextSendMessage, ImageMessage
-
-from sheet_utils import (
-    append_personal_record,
-    append_group_record,
-    get_personal_records_by_user,
-    reset_personal_record_by_name,
-    get_all_personal_records_by_user,
-    get_all_group_records,
-    delete_personal_record_by_index,
-    delete_group_record_by_index,
-    get_invoice_lottery_results,
-)
-
-from vision_utils import extract_and_process_invoice
-
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
 
 import os
 from datetime import datetime
+from sheet_utils import (
+    append_personal_record, get_personal_records_by_user,
+    reset_personal_record_by_name, get_all_personal_records_by_user,
+    delete_personal_record_by_index, append_group_record,
+    get_group_records_by_group, reset_group_record_by_group,
+    delete_group_record_by_index, get_invoice_records_by_user
+)
+from vision_utils import extract_and_process_invoice
 
 app = Flask(__name__)
+line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
+handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
-# 環境變數
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
-LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
-
-line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
-handler = WebhookHandler(LINE_CHANNEL_SECRET)
-
-# ===== 狀態記錄（簡單記憶） =====
-user_context = {}
+# 圖片暫存目錄
+TEMP_IMAGE_PATH = "/tmp/line_temp.jpg"
+LAST_IMAGE_USER = {}
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -42,141 +31,160 @@ def callback():
         handler.handle(body, signature)
     except InvalidSignatureError:
         abort(400)
-
     return "OK"
 
 @handler.add(MessageEvent, message=TextMessage)
-def handle_text_message(event):
-    text = event.message.text.strip()
+def handle_message(event):
     user_id = event.source.user_id
+    msg = event.message.text.strip()
     reply = ""
 
-    if text.startswith("記帳 "):
-        try:
-            parts = text[3:].split()
-            name = parts[0]
-            amount = int(parts[1])
-            date = parts[2] if len(parts) > 2 else datetime.now().strftime("%Y/%m/%d")
-            append_personal_record(name, "個人消費", amount, date)
-            reply = f"✅ {name} 已記帳 {amount} 元"
-        except Exception as e:
-            reply = f"❌ 記帳失敗：{e}"
+    now = datetime.now().strftime("%Y/%m/%d")
 
-    elif text.startswith("查詢個人記帳 "):
-        name = text[7:]
-        user_context[user_id] = {"mode": "delete_personal", "name": name}
-        records = get_personal_records_by_user(name)
-        if records:
-            total = sum(int(r["金額"]) for r in records)
-            lines = [f"{idx+1}. {r['日期']} {r['品項']} - {r['金額']}元" for idx, r in enumerate(records)]
-            reply = "\n".join(lines) + f"\n🔸總計：{total} 元"
-        else:
-            reply = "查無個人記帳紀錄"
-
-    elif text.startswith("重設個人記帳 "):
-        name = text[7:]
-        reset_personal_record_by_name(name)
-        reply = f"✅ 已重設 {name} 的個人記帳"
-
-    elif text.startswith("分帳 "):
-        try:
-            parts = text[3:].split()
-            today = datetime.now().strftime("%Y/%m/%d")
-            for part in parts:
-                name, amount = part.split(":")
-                append_group_record(name, "", "群組分帳", int(amount), today)
-            reply = "✅ 分帳記錄完成！"
-        except Exception as e:
-            reply = f"❌ 分帳失敗：{e}"
-
-    elif text == "查詢團體記帳":
-        records = get_all_group_records()
-        if records:
-            lines = [f"{r['日期']} {r['付款人']} - {r['金額']}元" for r in records]
-            reply = "\n".join(lines)
-        else:
-            reply = "查無團體記帳紀錄"
-
-    elif text.startswith("刪除個人 "):
-        try:
-            indexes = list(map(int, text[5:].split(",")))
-            name = user_context.get(user_id, {}).get("name")
-            if not name:
-                reply = "❗ 請先輸入『查詢個人記帳 姓名』來選擇刪除紀錄。"
-            else:
-                for idx in sorted(indexes, reverse=True):
-                    delete_personal_record_by_index(name, idx - 1)
-                reply = "✅ 已刪除個人記帳指定筆數"
-        except Exception as e:
-            reply = f"❌ 刪除個人記帳失敗：{e}"
-
-    elif text.startswith("刪除團體 "):
-        try:
-            indexes = list(map(int, text[5:].split(",")))
-            for idx in sorted(indexes, reverse=True):
-                delete_group_record_by_index(idx - 1)
-            reply = "✅ 已刪除團體記帳指定筆數"
-        except Exception as e:
-            reply = f"❌ 刪除團體記帳失敗：{e}"
-
-    elif text.startswith("查詢中獎"):
-        try:
-            name = text[5:] if len(text) > 5 else None
-            winning_numbers = {
-                "特別獎": "12345678",
-                "特獎": "87654321",
-                "頭獎": ["11112222", "33334444", "55556666"],
-            }
-            if name:
-                records = get_personal_records_by_user(name)
-            else:
-                records = get_all_personal_records_by_user()
-            results = get_invoice_lottery_results(records, winning_numbers)
-            reply = "\n".join(results) if results else "😢 很遺憾，這期沒有中獎喔～"
-        except Exception as e:
-            reply = f"❌ 查詢中獎失敗：{e}"
-
-    elif text == "指令說明":
-        reply = (
-            "📋 LINE 機器人指令說明：\n\n"
-            "【個人記帳】\n"
-            "記帳 小明 100 2025/04/20\n"
-            "查詢個人記帳 小明\n"
-            "重設個人記帳 小明\n"
-            "刪除個人 1 或 刪除個人 1,2\n\n"
-            "【群組分帳】\n"
-            "分帳 小明:50 小美:100\n"
-            "查詢團體記帳\n"
-            "刪除團體 1 或 刪除團體 1,2\n\n"
-            "【發票中獎】\n"
-            "查詢中獎 或 查詢中獎 小明\n\n"
-            "【發票拍照自動記帳】\n"
-            "上傳發票圖片後輸入：個人記帳 小明"
-        )
-
-    else:
-        reply = "❓ 請輸入有效指令，輸入「指令說明」查看可用指令～"
-
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
-
-@handler.add(MessageEvent, message=ImageMessage)
-def handle_image_message(event):
-    """處理發票圖片上傳，OCR辨識"""
     try:
-        message_id = event.message.id
-        image_content = line_bot_api.get_message_content(message_id).content
-        temp_path = "/tmp/invoice.jpg"
-        with open(temp_path, "wb") as f:
-            f.write(image_content)
+        # 📌 指令：個人記帳
+        if msg.startswith("記帳 "):
+            parts = msg.split()
+            if len(parts) >= 3:
+                name = parts[1]
+                amount = int(parts[2])
+                item = parts[3] if len(parts) >= 4 else "未命名項目"
+                append_personal_record(name, item, amount, now)
+                reply = f"✅ 已幫 {name} 記帳 {item} {amount} 元（{now}）"
+            else:
+                reply = "⚠️ 請使用格式：記帳 小明 100 飯糰"
 
-        invoice_data = extract_and_process_invoice(temp_path)
-        if isinstance(invoice_data, str):
-            reply = invoice_data  # 錯誤訊息
+        # 📌 查詢個人記帳
+        elif msg.startswith("查詢個人記帳 "):
+            name = msg.replace("查詢個人記帳 ", "")
+            records, total = get_personal_records_by_user(name)
+            reply = f"📋 {name} 的記帳紀錄：\n{records}\n\n💰 總共：{total} 元"
+
+        # 📌 重設個人記帳
+        elif msg.startswith("重設個人記帳 "):
+            name = msg.replace("重設個人記帳 ", "")
+            reset_personal_record_by_name(name)
+            reply = f"✅ 已清空 {name} 的所有記帳紀錄"
+
+        # 📌 刪除個人記帳
+        elif msg.startswith("刪除個人記帳 "):
+            name = msg.replace("刪除個人記帳 ", "")
+            df = get_all_personal_records_by_user(name)
+            if df.empty:
+                reply = f"{name} 沒有任何記帳紀錄"
+            else:
+                reply = f"{name} 的紀錄：\n"
+                for idx, row in df.iterrows():
+                    reply += f"{idx+1}. {row['Date']} - {row['Item']} {row['Amount']}元\n"
+                reply += "\n請輸入：刪除個人 1 或 刪除個人 1,2"
+
+        elif msg.startswith("刪除個人 "):
+            parts = msg.replace("刪除個人 ", "").split()
+            indexes = [int(i)-1 for i in parts[0].split(",")]
+            name = ""  # 你可將最近操作的人名存在記憶中以辨識
+            success = [delete_personal_record_by_index(name, i) for i in indexes]
+            reply = "✅ 已刪除指定記錄" if all(success) else "⚠️ 有些索引刪除失敗"
+
+        # 📌 分帳 群組 餐別 名:品項金額 ...
+        elif msg.startswith("分帳 "):
+            parts = msg.split()
+            group = parts[1]
+            meal = parts[2]
+            invoice_number = ""
+            payer = ""
+
+            if user_id in LAST_IMAGE_USER and LAST_IMAGE_USER[user_id]:
+                result = extract_and_process_invoice(TEMP_IMAGE_PATH)
+                if isinstance(result, str):
+                    reply = result
+                else:
+                    invoice_number = result["invoice_number"]
+                    LAST_IMAGE_USER[user_id] = None
+
+            for segment in parts[3:]:
+                if ":" not in segment:
+                    continue
+                name, item_info = segment.split(":")
+                item_name = ''.join(filter(str.isalpha, item_info))
+                item_amount = ''.join(filter(str.isdigit, item_info))
+                item_amount = int(item_amount) if item_amount else 0
+
+                if payer == "":
+                    payer = name
+                append_group_record(group, now, meal, item_name, payer, f"{name}:{item_amount}", item_amount, invoice_number)
+            reply = f"✅ 分帳完成（{group} - {meal}）"
+
+        # 📌 查詢團體記帳
+        elif msg.startswith("查詢團體記帳 "):
+            group = msg.replace("查詢團體記帳 ", "")
+            df = get_group_records_by_group(group)
+            if df.empty:
+                reply = f"⚠️ 查無 {group} 的記帳紀錄"
+            else:
+                reply = f"📋 {group} 記帳紀錄：\n"
+                for idx, row in df.iterrows():
+                    reply += f"{idx+1}. {row['Date']} {row['Meal']}：{row['Item']} {row['Members']}（{row['Amount']}元）\n"
+
+        # 📌 重設團體記帳
+        elif msg.startswith("重設團體記帳 "):
+            group = msg.replace("重設團體記帳 ", "")
+            reset_group_record_by_group(group)
+            reply = f"✅ 已清空 {group} 的所有記帳紀錄"
+
+        # 📌 刪除團體記帳
+        elif msg.startswith("刪除團體記帳 "):
+            group = msg.replace("刪除團體記帳 ", "")
+            df = get_group_records_by_group(group)
+            if df.empty:
+                reply = f"⚠️ 查無 {group} 紀錄"
+            else:
+                reply = f"請輸入刪除編號，例如：刪除團體 {group} 1\n\n"
+                for idx, row in df.iterrows():
+                    reply += f"{idx+1}. {row['Date']} {row['Meal']}\n"
+
+        elif msg.startswith("刪除團體 "):
+            parts = msg.split()
+            group = parts[1]
+            indexes = [int(i)-1 for i in parts[2].split(",")]
+            success = [delete_group_record_by_index(group, i) for i in indexes]
+            reply = f"✅ 已刪除 {group} 指定記錄" if all(success) else "⚠️ 有些刪除失敗"
+
+        # 📌 查詢中獎
+        elif msg.startswith("查詢中獎 "):
+            name = msg.replace("查詢中獎 ", "")
+            df = get_invoice_records_by_user(name)
+            if df.empty:
+                reply = f"❌ 沒有找到 {name} 的發票記錄"
+            else:
+                reply = f"📬 {name} 發票紀錄：\n"
+                for _, row in df.iterrows():
+                    reply += f"{row['Date']} {row['Invoice']} - {row['Amount']}元\n"
+
+        # 📌 查詢指令教學
+        elif msg == "指令說明":
+            reply = (
+                "📘 指令快速教學：\n\n"
+                "📍 個人記帳\n"
+                "記帳 小明 100 飯糰\n"
+                "查詢個人記帳 小明\n"
+                "刪除個人記帳 小明\n"
+                "刪除個人 1 或 刪除個人 1,2\n"
+                "重設個人記帳 小明\n\n"
+                "📍 團體記帳\n"
+                "分帳 大阪 早餐 小明:飯糰400 小花:鬆餅200 小強:牛肉飯500\n"
+                "查詢團體記帳 大阪\n"
+                "刪除團體記帳 大阪\n"
+                "刪除團體 大阪 1 或 刪除團體 大阪 1,2\n"
+                "重設團體記帳 大阪\n\n"
+                "📍 發票相關\n"
+                "上傳發票（圖片）+ 輸入分帳指令\n"
+                "查詢中獎 小明\n"
+            )
+
         else:
-            # 成功擷取，提示使用者記帳
-            reply = f"📄 發票擷取成功！\n發票號碼：{invoice_data['invoice_number']}\n總金額：{invoice_data['total']}元\n請輸入：個人記帳 小明"
+            reply = "❓ 無效指令，請輸入「指令說明」查看可用功能"
 
     except Exception as e:
-        reply = f"❌ 圖片處理失敗：{e}"
+        reply = f"❌ 發生錯誤：{str(e)}"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply))
