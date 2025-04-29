@@ -119,14 +119,56 @@ def handle_message(event):
                 reply = f"✅ 分帳完成：{group} - {meal}"
 
         elif msg.startswith("查詢團體記帳 "):
-            group = msg.replace("查詢團體記帳 ", "")
-            df = get_group_records_by_group(group)
-            if df.empty:
-                reply = f"⚠️ 查無 {group} 記帳資料"
+    group = msg.replace("查詢團體記帳 ", "")
+    df = get_group_records_by_group(group)
+    if df.empty:
+        reply = f"⚠️ 查無 {group} 記帳資料"
+    else:
+        reply = f"📋 {group} 的記帳紀錄：\n"
+        payers = {}
+        spenders = {}
+
+        for idx, row in df.iterrows():
+            date = row['Date']
+            meal = row['Meal']
+            item = row['Item']
+            payer = row['Payer']
+            members = row['Members']
+            amount = float(row['Amount'])
+
+            reply += f"{idx+1}. {date} {meal} {item} {members}（{amount}元）\n"
+
+            # 累加付款人實際付款
+            if payer not in payers:
+                payers[payer] = 0
+            payers[payer] += amount
+
+            # 累加成員應付款（可能為多位）
+            for m in members.split():
+                if ":" in m:
+                    name, amt = m.split(":")
+                    amt = float(amt)
+                    if name not in spenders:
+                        spenders[name] = 0
+                    spenders[name] += amt
+
+        # 結算每個人應收應付差額
+        balances = {}
+        all_people = set(list(payers.keys()) + list(spenders.keys()))
+        for person in all_people:
+            paid = payers.get(person, 0)
+            owe = spenders.get(person, 0)
+            balances[person] = round(paid - owe, 2)
+
+        reply += "\n💸 結算結果：\n"
+        for person, balance in balances.items():
+            if balance > 0:
+                reply += f"{person} 應收 {balance} 元\n"
+            elif balance < 0:
+                reply += f"{person} 應付 {abs(balance)} 元\n"
             else:
-                reply = f"📋 {group} 的記帳紀錄：\n"
-                for idx, row in df.iterrows():
-                    reply += f"{idx+1}. {row['Date']} {row['Meal']} {row['Item']} {row['Members']}（{row['Amount']}元）\n"
+                reply += f"{person} 平均無需補款\n"
+
 
         elif msg.startswith("重設團體記帳 "):
             group = msg.replace("重設團體記帳 ", "")
