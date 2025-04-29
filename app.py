@@ -19,7 +19,6 @@ line_bot_api = LineBotApi(os.getenv("LINE_CHANNEL_ACCESS_TOKEN"))
 handler = WebhookHandler(os.getenv("LINE_CHANNEL_SECRET"))
 
 TEMP_IMAGE_PATH = "/tmp/line_invoice.jpg"
-LAST_IMAGE_USER = {}
 
 @app.route("/callback", methods=["POST"])
 def callback():
@@ -75,7 +74,7 @@ def handle_message(event):
 
         elif msg.startswith("刪除個人 "):
             parts = msg.replace("刪除個人 ", "").split(",")
-            name = ""  # 建議實作：使用 session 或快取記憶最近查詢的人
+            name = ""  # 可改為最近查詢者
             success = all(delete_personal_record_by_index(name, int(i)-1) for i in parts)
             reply = "✅ 已刪除指定記錄" if success else "⚠️ 刪除失敗"
 
@@ -95,18 +94,24 @@ def handle_message(event):
         elif msg.startswith("分帳 "):
             parts = msg.split()
             if len(parts) < 4:
-                reply = "⚠️ 請使用：分帳 團體名 餐別 名:項目金額 ..."
+                reply = "⚠️ 請使用：分帳 團體名 餐別 名:品項金額 ..."
             else:
                 group = parts[1]
                 meal = parts[2]
-                invoice_number = ""
                 payer = ""
+                invoice_number = ""
+                start_index = 3
+
+                if parts[3].startswith("付款人:"):
+                    payer = parts[3].replace("付款人:", "")
+                    start_index = 4
+
                 if os.path.exists(TEMP_IMAGE_PATH):
                     result = extract_and_process_invoice(TEMP_IMAGE_PATH)
                     if isinstance(result, dict):
                         invoice_number = result["invoice_number"]
 
-                for p in parts[3:]:
+                for p in parts[start_index:]:
                     if ":" not in p:
                         continue
                     name, info = p.split(":")
@@ -119,56 +124,52 @@ def handle_message(event):
                 reply = f"✅ 分帳完成：{group} - {meal}"
 
         elif msg.startswith("查詢團體記帳 "):
-    group = msg.replace("查詢團體記帳 ", "")
-    df = get_group_records_by_group(group)
-    if df.empty:
-        reply = f"⚠️ 查無 {group} 記帳資料"
-    else:
-        reply = f"📋 {group} 的記帳紀錄：\n"
-        payers = {}
-        spenders = {}
-
-        for idx, row in df.iterrows():
-            date = row['Date']
-            meal = row['Meal']
-            item = row['Item']
-            payer = row['Payer']
-            members = row['Members']
-            amount = float(row['Amount'])
-
-            reply += f"{idx+1}. {date} {meal} {item} {members}（{amount}元）\n"
-
-            # 累加付款人實際付款
-            if payer not in payers:
-                payers[payer] = 0
-            payers[payer] += amount
-
-            # 累加成員應付款（可能為多位）
-            for m in members.split():
-                if ":" in m:
-                    name, amt = m.split(":")
-                    amt = float(amt)
-                    if name not in spenders:
-                        spenders[name] = 0
-                    spenders[name] += amt
-
-        # 結算每個人應收應付差額
-        balances = {}
-        all_people = set(list(payers.keys()) + list(spenders.keys()))
-        for person in all_people:
-            paid = payers.get(person, 0)
-            owe = spenders.get(person, 0)
-            balances[person] = round(paid - owe, 2)
-
-        reply += "\n💸 結算結果：\n"
-        for person, balance in balances.items():
-            if balance > 0:
-                reply += f"{person} 應收 {balance} 元\n"
-            elif balance < 0:
-                reply += f"{person} 應付 {abs(balance)} 元\n"
+            group = msg.replace("查詢團體記帳 ", "")
+            df = get_group_records_by_group(group)
+            if df.empty:
+                reply = f"⚠️ 查無 {group} 記帳資料"
             else:
-                reply += f"{person} 平均無需補款\n"
+                reply = f"📋 {group} 的記帳紀錄：\n"
+                payers = {}
+                spenders = {}
 
+                for idx, row in df.iterrows():
+                    date = row.get('Date', '')
+                    meal = row.get('Meal', '')
+                    item = row.get('Item', '')
+                    payer = row.get('Payer', '')
+                    members = row.get('Members', '')
+                    amount = float(row.get('Amount', 0))
+
+                    reply += f"{idx+1}. {date} {meal} {item} {members}（{amount}元）\n"
+
+                    if payer not in payers:
+                        payers[payer] = 0
+                    payers[payer] += amount
+
+                    for m in members.split():
+                        if ":" in m:
+                            name, amt = m.split(":")
+                            amt = float(amt)
+                            if name not in spenders:
+                                spenders[name] = 0
+                            spenders[name] += amt
+
+                balances = {}
+                all_names = set(payers.keys()) | set(spenders.keys())
+                for person in all_names:
+                    paid = payers.get(person, 0)
+                    owe = spenders.get(person, 0)
+                    balances[person] = round(paid - owe, 2)
+
+                reply += "\n💸 結算結果：\n"
+                for person, balance in balances.items():
+                    if balance > 0:
+                        reply += f"{person} 應收 {balance} 元\n"
+                    elif balance < 0:
+                        reply += f"{person} 應付 {abs(balance)} 元\n"
+                    else:
+                        reply += f"{person} 平均無需補款\n"
 
         elif msg.startswith("重設團體記帳 "):
             group = msg.replace("重設團體記帳 ", "")
@@ -184,7 +185,7 @@ def handle_message(event):
                 reply = f"📋 {group} 的紀錄：\n"
                 for idx, row in df.iterrows():
                     reply += f"{idx+1}. {row['Date']} {row['Meal']}\n"
-                reply += "\n請回覆：刪除團體 {group} 1 或 刪除團體 {group} 1,2"
+                reply += f"\n請回覆：刪除團體 {group} 1 或 刪除團體 {group} 1,2"
 
         elif msg.startswith("刪除團體 "):
             parts = msg.split()
@@ -214,7 +215,7 @@ def handle_message(event):
                 "刪除個人 1 或 刪除個人 1,2\n"
                 "重設個人記帳 小明\n\n"
                 "📍 團體記帳\n"
-                "分帳 大阪 早餐 小明:飯糰400 小花:鬆餅200 小強:牛肉飯500\n"
+                "分帳 大阪 早餐 付款人:小明 小明:飯糰400 小花:鬆餅200 小強:壽司500\n"
                 "查詢團體記帳 大阪\n"
                 "刪除團體記帳 大阪\n"
                 "刪除團體 大阪 1\n"
