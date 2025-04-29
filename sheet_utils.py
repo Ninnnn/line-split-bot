@@ -8,7 +8,7 @@ scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/au
 credentials = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
 client = gspread.authorize(credentials)
 
-SPREADSHEET_ID = "你的 Google Sheet ID"  # ⚠️請填入你的試算表 ID（僅此一處需自填）
+SPREADSHEET_ID = "1lC2baFstZ51E3iT_29N8KOfMoknrHMleSzTKx2emZ94"  # ⚠️請填入你的試算表 ID（僅此一處需自填）
 
 # ===== 個人記帳 =====
 def append_personal_record(name, item, amount, date, invoice_number=""):
