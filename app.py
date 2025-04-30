@@ -68,14 +68,14 @@ def handle_text(event):
                 "刪除個人 1 或 刪除個人 1,2\n"
                 "重設個人記帳 小明\n\n"
                 "📍 團體記帳\n"
-                "分帳 大阪 早餐 小明:飯糰400 小花:鬆餅200 小強:牛肉飯500\n"
+                "分帳 大阪 早餐 付款人:小明 小明:飯糰400 小花:鬆餅200 小強:壽司500\n"
                 "查詢團體記帳 大阪\n"
                 "刪除團體記帳 大阪\n"
-                "刪除團體 大阪 1 或 刪除團體 大阪 1,2\n"
+                "刪除團體 大阪 1\n"
                 "重設團體記帳 大阪\n\n"
                 "📍 發票與中獎\n"
                 "上傳發票 + 個人發票記帳 小明\n"
-                "查詢中獎 小明"
+                "查詢中獎 小明\n"
             )
 
         # ✅ 個人發票記帳
@@ -138,51 +138,76 @@ def handle_text(event):
                 meal = parts[2]
                 payer = ""
                 invoice_number = ""
+                start_index = 3
+
+                if parts[3].startswith("付款人:"):
+                    payer = parts[3].replace("付款人:", "")
+                    start_index = 4
 
                 if os.path.exists(TEMP_IMAGE_PATH):
                     result = extract_and_process_invoice(TEMP_IMAGE_PATH)
                     if isinstance(result, dict):
                         invoice_number = result["invoice_number"]
 
-                for p in parts[3:]:
+                for p in parts[start_index:]:
                     if ":" not in p:
                         continue
-                    name, item_amt = p.split(":")
-                    item_name = ''.join(filter(str.isalpha, item_amt))
-                    amount = int(''.join(filter(str.isdigit, item_amt)))
+                    name, info = p.split(":")
+                    item_name = ''.join(filter(str.isalpha, info))
+                    amount = int(''.join(filter(str.isdigit, info)))
                     if not payer:
                         payer = name
                     append_group_record(group, now, meal, item_name, payer, f"{name}:{amount}", amount, invoice_number)
 
-                reply = f"✅ 已分帳完成：{group} {meal}"
+                reply = f"✅ 分帳完成：{group} - {meal}"
 
         elif msg.startswith("查詢團體記帳 "):
             group = msg.replace("查詢團體記帳 ", "")
             df = get_group_records_by_group(group)
-            if not len(df):
-                reply = "⚠️ 查無資料"
+            if df.empty:
+                reply = f"⚠️ 查無 {group} 記帳資料"
             else:
-                lines = []
+                reply = f"📋 {group} 的記帳紀錄：\n"
                 payers = {}
                 spenders = {}
-                for i, row in enumerate(df):
-                    date, meal, item, payer, members, amt = row["Date"], row["Meal"], row["Item"], row["Payer"], row["Members"], float(row["Amount"])
-                    lines.append(f"{i+1}. {date} {meal} {item} {members}（{amt}元）")
-                    payers[payer] = payers.get(payer, 0) + amt
+
+                for idx, row in df.iterrows():
+                    date = row.get('Date', '')
+                    meal = row.get('Meal', '')
+                    item = row.get('Item', '')
+                    payer = row.get('Payer', '')
+                    members = row.get('Members', '')
+                    amount = float(row.get('Amount', 0))
+
+                    reply += f"{idx+1}. {date} {meal} {item} {members}（{amount}元）\n"
+
+                    if payer not in payers:
+                        payers[payer] = 0
+                    payers[payer] += amount
+
                     for m in members.split():
                         if ":" in m:
-                            n, a = m.split(":")
-                            spenders[n] = spenders.get(n, 0) + float(a)
-                reply = f"📋 {group} 紀錄：\n" + "\n".join(lines)
-                reply += "\n\n💰 結算：\n"
-                for n in set(payers) | set(spenders):
-                    diff = round(payers.get(n, 0) - spenders.get(n, 0), 2)
-                    if diff > 0:
-                        reply += f"{n} 應收 {diff} 元\n"
-                    elif diff < 0:
-                        reply += f"{n} 應付 {-diff} 元\n"
+                            name, amt = m.split(":")
+                            amt = float(amt)
+                            if name not in spenders:
+                                spenders[name] = 0
+                            spenders[name] += amt
+
+                balances = {}
+                all_names = set(payers.keys()) | set(spenders.keys())
+                for person in all_names:
+                    paid = payers.get(person, 0)
+                    owe = spenders.get(person, 0)
+                    balances[person] = round(paid - owe, 2)
+
+                reply += "\n💸 結算結果：\n"
+                for person, balance in balances.items():
+                    if balance > 0:
+                        reply += f"{person} 應收 {balance} 元\n"
+                    elif balance < 0:
+                        reply += f"{person} 應付 {abs(balance)} 元\n"
                     else:
-                        reply += f"{n} 平均無需補款\n"
+                        reply += f"{person} 平均無需補款\n
 
         elif msg.startswith("刪除團體記帳 "):
             group = msg.replace("刪除團體記帳 ", "")
