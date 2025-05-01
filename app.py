@@ -1,4 +1,4 @@
-# 完整升級版 app.py（已修正查詢錯誤、自動兌獎、刪除錯誤）
+# 完整升級版 app.py（含圖片上傳、發票記帳、個人團體記帳、自動補差額、補發票、對獎、錯誤修正）
 
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -74,7 +74,7 @@ def handle_message(event):
             parts = msg.replace("補發票 ", "").split()
             if len(parts) == 4:
                 name, invoice_number, date, amount = parts
-                append_invoice_record(name, invoice_number, date, int(amount))
+                append_invoice_record(name, invoice_number, date, amount)
                 reply = f"✅ 補發票成功：{name} {invoice_number} {amount} 元"
             else:
                 reply = "⚠️ 請使用格式：補發票 小明 AB12345678 2025/04/25 420"
@@ -119,8 +119,9 @@ def handle_message(event):
 
         elif msg.startswith("刪除個人 "):
             parts = msg.replace("刪除個人 ", "").split(",")
-            name = ""  # 可替換為使用者
-            success = all(delete_personal_record_by_index(name, int(i)-1) for i in parts)
+            name = ""  # 預設空白或未來可記錄上下文
+            indexes = [int(i)-1 for i in parts]
+            success = all(delete_personal_record_by_index(name, i) for i in indexes)
             reply = "✅ 已刪除指定記錄" if success else "⚠️ 刪除失敗"
 
         elif msg.startswith("重設個人記帳 "):
@@ -158,11 +159,11 @@ def handle_message(event):
             else:
                 payers, spenders = {}, {}
                 lines = []
-                for _, row in df.iterrows():
+                for i, row in df.iterrows():
                     date, meal, item, payer, members, amt = row["Date"], row["Meal"], row["Item"], row["Payer"], row["Members"], float(row["Amount"])
-                    lines.append(f"{date} {meal} {item} {members}（{amt}元）")
+                    lines.append(f"{i+1}. {date} {meal} {item} {members}（{amt}元）")
                     payers[payer] = payers.get(payer, 0) + amt
-                    for m in members.split():
+                    for m in str(members).split():
                         if ":" in m:
                             n, a = m.split(":")
                             spenders[n] = spenders.get(n, 0) + float(a)
@@ -176,6 +177,24 @@ def handle_message(event):
                     else:
                         reply += f"{n} 無需補款\n"
 
+        elif msg.startswith("刪除團體記帳 "):
+            group = msg.replace("刪除團體記帳 ", "")
+            df = get_group_records_by_group(group)
+            if df.empty:
+                reply = f"⚠️ 無 {group} 資料"
+            else:
+                reply = f"📋 {group} 記錄如下：\n"
+                for i, row in df.iterrows():
+                    reply += f"{i+1}. {row['Date']} {row['Meal']}\n"
+                reply += f"請回覆：刪除團體 {group} 1 或 刪除團體 {group} 1,2"
+
+        elif msg.startswith("刪除團體 "):
+            parts = msg.split()
+            group = parts[1]
+            indexes = [int(i)-1 for i in parts[2].split(",")]
+            success = all(delete_group_record_by_index(group, int(i)) for i in indexes)
+            reply = "✅ 已刪除指定紀錄" if success else "⚠️ 刪除失敗"
+
         elif msg.startswith("刪除餐別 "):
             parts = msg.replace("刪除餐別 ", "").split()
             group, date, meal = parts[0], parts[1], parts[2]
@@ -186,24 +205,6 @@ def handle_message(event):
             else:
                 ok = all(delete_group_record_by_index(group, int(i)) for i in to_delete.index)
                 reply = f"✅ 已刪除 {group} {date} {meal}" if ok else "⚠️ 部分刪除失敗"
-
-        elif msg.startswith("刪除團體記帳 "):
-            group = msg.replace("刪除團體記帳 ", "")
-            df = get_group_records_by_group(group)
-            if df.empty:
-                reply = f"⚠️ 無 {group} 記帳資料"
-            else:
-                reply = f"📋 {group} 的記錄如下：\n"
-                for i, row in df.iterrows():
-                    reply += f"{i+1}. {row['Date']} {row['Meal']}\n"
-                reply += f"請回覆：刪除團體 {group} 1 或 刪除團體 {group} 1,2"
-
-        elif msg.startswith("刪除團體 "):
-            parts = msg.split()
-            group = parts[1]
-            indexes = [int(i)-1 for i in parts[2].split(",")]
-            ok = all(delete_group_record_by_index(group, int(i)) for i in indexes)
-            reply = "✅ 已刪除指定紀錄" if ok else "⚠️ 刪除失敗"
 
         elif msg.startswith("重設團體記帳 "):
             group = msg.replace("重設團體記帳 ", "")
