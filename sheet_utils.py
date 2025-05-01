@@ -2,17 +2,16 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
-import re
 import requests
 
-# ===== Google Sheets 設定 =====
+# ===== Google Sheets 授權設定 =====
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 credentials = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
 client = gspread.authorize(credentials)
 
-SPREADSHEET_ID = "1lC2baFstZ51E3iT_29N8KOfMoknrHMleSzTKx2emZ94"  # ⚠️請填入你的試算表 ID（僅此一處需自填）
+SPREADSHEET_ID = "1lC2baFstZ51E3iT_29N8KOfMoknrHMleSzTKx2emZ94"  # ✅ 你的 Google Sheet ID
 
-# ===== 個人記帳 =====
+# ===== 個人記帳功能 =====
 def append_personal_record(name, item, amount, date, invoice_number=""):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     sheet.append_row([name, item, amount, date, invoice_number])
@@ -20,9 +19,19 @@ def append_personal_record(name, item, amount, date, invoice_number=""):
 def get_personal_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
-    user_records = df[df["Name"] == name]
-    total_amount = user_records["Amount"].sum() if not user_records.empty else 0
-    return user_records.to_string(index=False), total_amount
+    df = df[df["Name"] == name]
+
+    if df.empty:
+        return "⚠️ 查無記錄", 0
+
+    total = df["Amount"].sum()
+
+    formatted = df[["Name", "Item", "Amount", "Date", "Invoice"]].to_string(
+        index=False,
+        justify="left",
+        col_space=10
+    )
+    return formatted, total
 
 def get_all_personal_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
@@ -42,14 +51,16 @@ def reset_personal_record_by_name(name):
 def delete_personal_record_by_index(name, index):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
-    personal_records = df[df["Name"] == name]
-    if index < 0 or index >= len(personal_records):
+    records = df[df["Name"] == name]
+
+    if index < 0 or index >= len(records):
         return False
-    row_number = int(personal_records.index[index]) + 2
+
+    row_number = records.index[index] + 2  # +2 for header and 0-index
     sheet.delete_rows(row_number)
     return True
 
-# ===== 團體記帳 =====
+# ===== 團體記帳功能 =====
 def append_group_record(group, date, meal, item, payer, member_string, amount, invoice_number=""):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     sheet.append_row([group, date, meal, item, payer, member_string, amount, invoice_number])
@@ -72,77 +83,88 @@ def reset_group_record_by_group(group):
 def delete_group_record_by_index(group, index):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     df = pd.DataFrame(sheet.get_all_records())
-    group_records = df[df["Group"] == group]
-    if index < 0 or index >= len(group_records):
+    records = df[df["Group"] == group]
+
+    if index < 0 or index >= len(records):
         return False
-    row_number = int(group_records.index[index]) + 2
+
+    row_number = records.index[index] + 2
     sheet.delete_rows(row_number)
     return True
 
-def delete_group_record_by_meal(group, date, meal):
+def delete_group_record_by_date_meal(group, date, meal):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     df = pd.DataFrame(sheet.get_all_records())
-    target = df[(df["Group"] == group) & (df["Date"] == date) & (df["Meal"] == meal)]
-    if target.empty:
+    df_filtered = df[(df["Group"] == group) & (df["Date"] == date) & (df["Meal"] == meal)]
+
+    if df_filtered.empty:
         return False
-    for idx in sorted(target.index, reverse=True):
-        sheet.delete_rows(int(idx) + 2)
+
+    sheet_data = sheet.get_all_values()
+    headers = sheet_data[0]
+    body = sheet_data[1:]
+    kept = [row for row in body if not (row[0] == group and row[1] == date and row[2] == meal)]
+
+    sheet.clear()
+    sheet.append_row(headers)
+    for row in kept:
+        sheet.append_row(row)
     return True
 
-# ===== 發票功能與對獎 =====
-def append_invoice_record(name, invoice, date, amount):
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
-    sheet.append_row(["補發票", date, "", "補登", name, f"{name}:{amount}", amount, invoice])
+# ===== 發票功能 =====
+def append_invoice_record(name, invoice_number, date, amount):
+    append_personal_record(name, "發票補登", int(amount), date, invoice_number)
 
 def get_invoice_records_by_user(name):
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
-    return df[(df["Payer"] == name) & (df["Invoice"] != "")]
+    df = df[(df["Name"] == name) & (df["Invoice"] != "")]
+    return df
 
 def get_invoice_lottery_results(name):
-    records = get_invoice_records_by_user(name)
-    if records.empty:
+    df = get_invoice_records_by_user(name)
+    if df.empty:
         return f"⚠️ {name} 沒有發票紀錄"
 
-    res = f"📬 {name} 的中獎查詢：\n"
-    for _, row in records.iterrows():
-        date = row["Date"]
-        inv = row["Invoice"]
-        amt = row["Amount"]
+    # 擷取所有發票號碼與日期
+    invoice_list = df[["Date", "Invoice"]].dropna().to_dict(orient="records")
 
-        try:
-            y, m, d = map(int, date.split("/"))
-            period_month = (m - 1) // 2 * 2 + 1
-            period = f"{y}/{period_month:02d}-{period_month+1:02d}"
-        except:
-            period = "未知期別"
-
-        is_win = check_lottery_winning(inv, period)
-        status = "✅ 中獎" if is_win else "➜ 未中獎"
-        res += f"{date} - {inv} ➜ {status}\n"
-    return res
-
-def check_lottery_winning(invoice_number, period):
-    url = "https://invoice.etax.nat.gov.tw/invoiceService"
-    payload = {
-        "action": "QryWinningList",
-        "invTerm": period.replace("/", "")
-    }
+    # 財政部開獎號碼
     try:
-        r = requests.get(url, params=payload, timeout=5)
-        data = r.json()
-        if "superPrizeNo" not in data:
-            return False
+        url = "https://invoice.etax.nat.gov.tw/invoice.json"
+        res = requests.get(url)
+        award_data = res.json()[0]  # 只取最新一期
+        year_month = f"{award_data['year']}/{award_data['month']}"
 
-        inv_head = invoice_number[:2]
-        inv_tail = invoice_number[2:]
+        # 對獎邏輯
+        special = award_data["superPrizeNo"]  # 特別獎
+        grand = award_data["spcPrizeNo"]      # 特獎
+        first = award_data["firstPrize"]      # 頭獎（3 組）
+        additional = award_data["sixPrize"]   # 增開六獎
 
-        if inv_tail == data["superPrizeNo"] or inv_tail == data["spcPrizeNo"]:
-            return True
+        results = f"📬 {name} 的中獎查詢（{year_month}）：\n"
 
-        for n in data.get("firstPrizeNo", "").split(","):
-            if inv_tail == n or inv_tail[-7:] == n[-7:] or inv_tail[-6:] == n[-6:] or inv_tail[-5:] == n[-5:]:
-                return True
-        return False
-    except:
-        return False
+        for entry in invoice_list:
+            num = entry["Invoice"]
+            date = entry["Date"]
+            matched = ""
+
+            if num == special:
+                matched = "特別獎 💰"
+            elif num == grand:
+                matched = "特獎 💰"
+            elif any(num[:8] == f[:8] for f in first):
+                matched = "頭獎 💰"
+            elif any(num[-3:] == f[-3:] for f in first):
+                matched = "六獎"
+            elif any(num[-3:] == a for a in additional):
+                matched = "六獎（增開）"
+            else:
+                matched = "未中獎"
+
+            results += f"{date} - {num} ➜ {matched}\n"
+
+        return results
+
+    except Exception as e:
+        return f"❌ 發票查詢失敗：{e}"
