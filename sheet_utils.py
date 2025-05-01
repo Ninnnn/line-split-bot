@@ -92,7 +92,7 @@ def delete_group_record_by_index(group, index):
     sheet.delete_rows(row_number)
     return True
 
-def delete_group_record_by_date_meal(group, date, meal):
+def delete_group_record_by_meal(group, date, meal):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     df = pd.DataFrame(sheet.get_all_records())
     df_filtered = df[(df["Group"] == group) & (df["Date"] == date) & (df["Meal"] == meal)]
