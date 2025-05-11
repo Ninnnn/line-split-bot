@@ -14,7 +14,7 @@ SPREADSHEET_ID = "1lC2baFstZ51E3iT_29N8KOfMoknrHMleSzTKx2emZ94"  # ✅ 你的 Go
 # ===== 個人記帳功能 =====
 def append_personal_record(name, item, amount, date, invoice_number=""):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
-    sheet.append_row([name, item, amount, date, invoice_number])
+    sheet.append_row([name, item, float(amount), date, invoice_number])
 
 def get_personal_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
@@ -24,7 +24,7 @@ def get_personal_records_by_user(name):
     if df.empty:
         return "⚠️ 查無記錄", 0
 
-    total = df["Amount"].sum()
+    total = df["Amount"].astype(float).sum()
 
     formatted = df[["Name", "Item", "Amount", "Date", "Invoice"]].to_string(
         index=False,
@@ -63,7 +63,7 @@ def delete_personal_record_by_index(name, index):
 # ===== 團體記帳功能 =====
 def append_group_record(group, date, meal, item, payer, member_string, amount, invoice_number=""):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
-    sheet.append_row([group, date, meal, item, payer, member_string, amount, invoice_number])
+    sheet.append_row([group, date, meal, item, payer, member_string, float(amount), invoice_number])
 
 def get_group_records_by_group(group):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
@@ -113,7 +113,7 @@ def delete_group_record_by_meal(group, date, meal):
 
 # ===== 發票功能 =====
 def append_invoice_record(name, invoice_number, date, amount):
-    append_personal_record(name, "發票補登", int(amount), date, invoice_number)
+    append_personal_record(name, "發票補登", float(amount), date, invoice_number)
 
 def get_invoice_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
