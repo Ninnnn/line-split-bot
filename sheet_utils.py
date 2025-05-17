@@ -24,7 +24,8 @@ def get_personal_records_by_user(name):
     if df.empty:
         return "⚠️ 查無記錄", 0
 
-    total = df["Amount"].astype(float).sum()
+    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
+    total = df["Amount"].sum()
 
     formatted = df[["Name", "Item", "Amount", "Date", "Invoice"]].to_string(
         index=False,
@@ -68,7 +69,9 @@ def append_group_record(group, date, meal, item, payer, member_string, amount, i
 def get_group_records_by_group(group):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     df = pd.DataFrame(sheet.get_all_records())
-    return df[df["Group"] == group]
+    df = df[df["Group"] == group]
+    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
+    return df
 
 def reset_group_record_by_group(group):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
@@ -119,28 +122,30 @@ def get_invoice_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
     df = df[(df["Name"] == name) & (df["Invoice"] != "")]
+    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
     return df
+
+def get_invoice_total_by_user(name):
+    df = get_invoice_records_by_user(name)
+    return df["Amount"].sum() if not df.empty else 0
 
 def get_invoice_lottery_results(name):
     df = get_invoice_records_by_user(name)
     if df.empty:
         return f"⚠️ {name} 沒有發票紀錄"
 
-    # 擷取所有發票號碼與日期
     invoice_list = df[["Date", "Invoice"]].dropna().to_dict(orient="records")
 
-    # 財政部開獎號碼
     try:
         url = "https://invoice.etax.nat.gov.tw/invoice.json"
         res = requests.get(url)
         award_data = res.json()[0]  # 只取最新一期
         year_month = f"{award_data['year']}/{award_data['month']}"
 
-        # 對獎邏輯
-        special = award_data["superPrizeNo"]  # 特別獎
-        grand = award_data["spcPrizeNo"]      # 特獎
-        first = award_data["firstPrize"]      # 頭獎（3 組）
-        additional = award_data["sixPrize"]   # 增開六獎
+        special = award_data["superPrizeNo"]
+        grand = award_data["spcPrizeNo"]
+        first = award_data["firstPrize"]
+        additional = award_data["sixPrize"]
 
         results = f"📬 {name} 的中獎查詢（{year_month}）：\n"
 
