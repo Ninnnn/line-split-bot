@@ -1,4 +1,4 @@
-# 完整升級版 app.py（含圖片上傳、發票記帳、個人團體記帳、自動補差額、補發票、對獎、刪除餐別 + 支援小數金額）
+# 完整升級版 app.py（含圖片上傳、發票記帳、個人團體記帳、自動補差額、補發票、對獎、刪除餐別 + 支援小數金額 + 補強錯誤處理與查明細/結算）
 
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -40,7 +40,8 @@ def handle_image(event):
     with open(TEMP_IMAGE_PATH, "wb") as f:
         for chunk in content.iter_content():
             f.write(chunk)
-    line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📷 發票圖片上傳成功，請輸入記帳指令，例如：\n個人發票記帳 小明 或 分帳 大阪 早餐 小明:飯糰400 ..."))
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(
+        text="📷 發票圖片上傳成功，請輸入記帳指令，例如：\n個人發票記帳 小明 或 分帳 大阪 早餐 小明:飯糰400 ..."))
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
@@ -62,6 +63,8 @@ def handle_message(event):
                 "📍 團體記帳\n"
                 "分帳 大阪 早餐 付款人:小明 小明:飯糰400 小花:鬆餅200 小強:壽司500\n"
                 "查詢團體記帳 大阪\n"
+                "查明細 大阪\n"
+                "查結算 大阪\n"
                 "刪除團體記帳 大阪\n"
                 "刪除團體 大阪 1 或 刪除團體 大阪 1,2\n"
                 "刪除餐別 大阪 2025/05/01 早餐\n"
@@ -97,7 +100,8 @@ def handle_message(event):
         elif msg.startswith("記帳 "):
             parts = msg.split()
             if len(parts) >= 4:
-                name, amount, item = parts[1], float(parts[2]), parts[3]
+                name, raw_amount, item = parts[1], parts[2], parts[3]
+                amount = float(''.join(filter(lambda c: c.isdigit() or c == '.', raw_amount)))
                 append_personal_record(name, item, amount, now)
                 reply = f"✅ {name} 記帳成功：{item} {amount} 元（{now}）"
             else:
@@ -121,7 +125,7 @@ def handle_message(event):
 
         elif msg.startswith("刪除個人 "):
             parts = msg.replace("刪除個人 ", "").split(",")
-            name = ""
+            name = ""  # 預設為空，未來可記錄使用者對應名
             success = all(delete_personal_record_by_index(name, int(i)-1) for i in parts)
             reply = "✅ 已刪除指定記錄" if success else "⚠️ 刪除失敗"
 
@@ -152,8 +156,8 @@ def handle_message(event):
                     append_group_record(group, now, meal, item, payer, f"{name}:{amount}", amount, invoice_number)
             reply = f"✅ 分帳成功：{group} {meal}"
 
-        elif msg.startswith("查詢團體記帳 "):
-            group = msg.replace("查詢團體記帳 ", "")
+        elif msg.startswith("查明細 ") or msg.startswith("查結算 ") or msg.startswith("查詢團體記帳 "):
+            group = msg.replace("查明細 ", "").replace("查結算 ", "").replace("查詢團體記帳 ", "")
             df = get_group_records_by_group(group)
             if df.empty:
                 reply = f"⚠️ 查無 {group} 資料"
@@ -168,15 +172,18 @@ def handle_message(event):
                         if ":" in m:
                             n, a = m.split(":")
                             spenders[n] = spenders.get(n, 0) + float(a)
-                reply = "📋 " + group + " 記錄：\n" + "\n".join(lines) + "\n\n💸 結算：\n"
-                for n in set(payers) | set(spenders):
-                    diff = round(payers.get(n, 0) - spenders.get(n, 0), 2)
-                    if diff > 0:
-                        reply += f"{n} 應收 {diff} 元\n"
-                    elif diff < 0:
-                        reply += f"{n} 應付 {-diff} 元\n"
-                    else:
-                        reply += f"{n} 無需補款\n"
+                if msg.startswith("查明細"):
+                    reply = "📋 " + group + " 記錄：\n" + "\n".join(lines)
+                elif msg.startswith("查結算") or msg.startswith("查詢團體記帳"):
+                    reply = "📋 " + group + " 記錄：\n" + "\n".join(lines) + "\n\n💸 結算：\n"
+                    for n in sorted(set(payers) | set(spenders)):
+                        diff = round(payers.get(n, 0) - spenders.get(n, 0), 2)
+                        if diff > 0:
+                            reply += f"{n} 應收 {diff} 元\n"
+                        elif diff < 0:
+                            reply += f"{n} 應付 {-diff} 元\n"
+                        else:
+                            reply += f"{n} 無需補款\n"
 
         elif msg.startswith("刪除團體記帳 "):
             group = msg.replace("刪除團體記帳 ", "")
