@@ -125,7 +125,7 @@ def handle_message(event):
 
         elif msg.startswith("刪除個人 "):
             parts = msg.replace("刪除個人 ", "").split(",")
-            name = ""  # 預設為空，未來可記錄使用者對應名
+            name = ""
             success = all(delete_personal_record_by_index(name, int(i)-1) for i in parts)
             reply = "✅ 已刪除指定記錄" if success else "⚠️ 刪除失敗"
 
@@ -177,11 +177,11 @@ def handle_message(event):
                 elif msg.startswith("查結算") or msg.startswith("查詢團體記帳"):
                     reply = "📋 " + group + " 記錄：\n" + "\n".join(lines) + "\n\n💸 結算：\n"
                     for n in sorted(set(payers) | set(spenders)):
-                        diff = round(payers.get(n, 0) - spenders.get(n, 0), 2)
+                        diff = round(spenders.get(n, 0) - payers.get(n, 0), 2)
                         if diff > 0:
-                            reply += f"{n} 應收 {diff} 元\n"
+                            reply += f"{n} 應付 {diff} 元\n"
                         elif diff < 0:
-                            reply += f"{n} 應付 {-diff} 元\n"
+                            reply += f"{n} 應收 {-diff} 元\n"
                         else:
                             reply += f"{n} 無需補款\n"
 
