@@ -17,10 +17,6 @@ def append_personal_record(name, item, amount, date, invoice_number=""):
     sheet.append_row([name, item, float(amount), date, invoice_number])
 
 def get_all_personal_records_by_user(name):
-    """
-    取得某使用者所有個人記帳記錄的 DataFrame，保留所有欄位，不做格式化。
-    可用於進一步篩選、統計或展示。
-    """
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
     return df[df["Name"] == name].reset_index(drop=True)
@@ -153,35 +149,7 @@ def get_group_fund_balance_per_member(group_name):
     df = pd.DataFrame(sheet.get_all_records())
     df = df[df["Group"] == group_name]
     df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
-    summary = df.groupby("Member")["Amount"].sum().to_dict()
-    return summary
-
-def reset_personal_record_by_name(name):
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
-    records = sheet.get_all_values()
-    headers = records[0]
-    filtered = [row for row in records[1:] if row[0] != name]
-    sheet.clear()
-    sheet.append_row(headers)
-    for row in filtered:
-        sheet.append_row(row)
-
-def reset_group_record_by_group(group_name):
-    """
-    重置某一個群組的所有團體記帳紀錄，會刪除 group_records 中該群組的所有資料。
-    """
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
-    records = sheet.get_all_values()
-    if not records:
-        return False  # 空表格，無需操作
-
-    headers = records[0]
-    filtered = [row for row in records[1:] if row[0] != group_name]  # 第 0 欄是 Group 名稱
-    sheet.clear()
-    sheet.append_row(headers)
-    for row in filtered:
-        sheet.append_row(row)
-    return True
+    return df.groupby("Member")["Amount"].sum().to_dict()
 
 def get_group_fund_summary(group_name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
@@ -209,3 +177,26 @@ def get_group_fund_history(group_name, member):
         act = "儲值" if row["Type"] == "topup" else "支出"
         result += f"{row['Date']} - {act}：{abs(row['Amount']):.0f} 元\n"
     return result
+
+def reset_personal_record_by_name(name):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
+    records = sheet.get_all_values()
+    headers = records[0]
+    filtered = [row for row in records[1:] if row[0] != name]
+    sheet.clear()
+    sheet.append_row(headers)
+    for row in filtered:
+        sheet.append_row(row)
+
+def reset_group_record_by_group(group_name):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
+    records = sheet.get_all_values()
+    if not records:
+        return False
+    headers = records[0]
+    filtered = [row for row in records[1:] if row[0] != group_name]
+    sheet.clear()
+    sheet.append_row(headers)
+    for row in filtered:
+        sheet.append_row(row)
+    return True
