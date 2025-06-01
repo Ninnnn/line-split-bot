@@ -1,4 +1,4 @@
-# 完整升級版 app.py（含圖片上傳、發票記帳、個人團體記帳、自動補差額、補發票、對獎、刪除餐別 + 支援小數金額 + 補強錯誤處理與查明細/結算）
+# app.py
 
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -14,7 +14,8 @@ from sheet_utils import (
     get_group_records_by_group, reset_group_record_by_group,
     delete_group_record_by_index, get_invoice_records_by_user,
     get_invoice_lottery_results, append_invoice_record,
-    delete_group_record_by_meal
+    delete_group_record_by_meal, create_group, add_group_fund,
+    get_group_fund_balance, get_group_members
 )
 from vision_utils import extract_and_process_invoice
 
@@ -41,13 +42,14 @@ def handle_image(event):
         for chunk in content.iter_content():
             f.write(chunk)
     line_bot_api.reply_message(event.reply_token, TextSendMessage(
-        text="📷 發票圖片上傳成功，請輸入記帳指令，例如：\n個人發票記帳 小明 或 分帳 大阪 早餐 小明:飯糰400 ..."))
+        text="📷 發票圖片上傳成功，請輸入記帳指令，例如：\n個人發票記帳 小明 或 分帳 名古屋 早餐 1000"))
 
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
     msg = event.message.text.strip()
     now = datetime.now().strftime("%Y/%m/%d")
     reply = ""
+
     try:
         if msg == "指令說明":
             reply = (
@@ -60,19 +62,18 @@ def handle_message(event):
                 "刪除個人記帳 小明\n"
                 "刪除個人 1 或 刪除個人 1,2\n"
                 "重設個人記帳 小明\n\n"
-                "📍 團體記帳\n"
-                "分帳 大阪 早餐 付款人:小明 小明:飯糰400 小花:鬆餅200 小強:壽司500\n"
-                "查詢團體記帳 大阪\n"
-                "查明細 大阪\n"
-                "查結算 大阪\n"
-                "刪除團體記帳 大阪\n"
-                "刪除團體 大阪 1 或 刪除團體 大阪 1,2\n"
-                "刪除餐別 大阪 2025/05/01 早餐\n"
-                "重設團體記帳 大阪\n\n"
+                "📍 團體記帳與公費\n"
+                "建立團體記帳 名古屋 小明 小花 小強\n"
+                "儲值公費 名古屋 3000\n"
+                "分帳 名古屋 早餐 1000 小明+100 小花-100\n"
+                "查詢團體記帳 名古屋\n"
+                "刪除團體記帳 名古屋\n"
+                "刪除團體 名古屋 1 或 刪除團體 名古屋 1,2\n"
+                "刪除餐別 名古屋 2025/06/01 早餐\n"
+                "重設團體記帳 名古屋\n\n"
                 "📍 發票與中獎\n"
                 "上傳發票 + 個人發票記帳 小明\n"
                 "查詢中獎 小明\n"
-                "補發票 小明 AB12345678 2025/04/25 420\n"
             )
 
         elif msg.startswith("補發票 "):
@@ -125,8 +126,7 @@ def handle_message(event):
 
         elif msg.startswith("刪除個人 "):
             parts = msg.replace("刪除個人 ", "").split(",")
-            name = ""
-            success = all(delete_personal_record_by_index(name, int(i)-1) for i in parts)
+            success = all(delete_personal_record_by_index("", int(i)-1) for i in parts)
             reply = "✅ 已刪除指定記錄" if success else "⚠️ 刪除失敗"
 
         elif msg.startswith("重設個人記帳 "):
@@ -134,56 +134,69 @@ def handle_message(event):
             reset_personal_record_by_name(name)
             reply = f"✅ 已重設 {name} 的個人記帳"
 
-        elif msg.startswith("分帳 "):
-            parts = msg.split()
-            group, meal = parts[1], parts[2]
-            payer, invoice_number = "", ""
-            start_idx = 3
-            if parts[3].startswith("付款人:"):
-                payer = parts[3].replace("付款人:", "")
-                start_idx = 4
-            if os.path.exists(TEMP_IMAGE_PATH):
-                result = extract_and_process_invoice(TEMP_IMAGE_PATH)
-                if isinstance(result, dict):
-                    invoice_number = result["invoice_number"]
-            for p in parts[start_idx:]:
-                if ":" in p:
-                    name, v = p.split(":")
-                    item = ''.join(filter(str.isalpha, v))
-                    amount = float(''.join(filter(lambda x: x.isdigit() or x == '.', v)))
-                    if not payer:
-                        payer = name
-                    append_group_record(group, now, meal, item, payer, f"{name}:{amount}", amount, invoice_number)
-            reply = f"✅ 分帳成功：{group} {meal}"
+        elif msg.startswith("建立團體記帳 "):
+            parts = msg.replace("建立團體記帳 ", "").split()
+            group_name, members = parts[0], parts[1:]
+            create_group(group_name, members)
+            reply = f"✅ 已建立團體 {group_name}，成員：{'、'.join(members)}"
 
-        elif msg.startswith("查明細 ") or msg.startswith("查結算 ") or msg.startswith("查詢團體記帳 "):
-            group = msg.replace("查明細 ", "").replace("查結算 ", "").replace("查詢團體記帳 ", "")
+        elif msg.startswith("儲值公費 "):
+            parts = msg.replace("儲值公費 ", "").split()
+            group_name = parts[0]
+            amount = float(parts[1])
+            members = get_group_members(group_name)
+            if not members:
+                reply = f"⚠️ 找不到團體 {group_name}"
+            else:
+                split_amount = round(amount / len(members), 2)
+                for member in members:
+                    add_group_fund(group_name, member, split_amount)
+                reply = f"✅ 團體 {group_name} 公費儲值 {amount} 元（每人 {split_amount} 元）"
+
+        elif msg.startswith("分帳 "):
+            parts = msg.replace("分帳 ", "").split()
+            group, meal, amount_raw = parts[0], parts[1], parts[2]
+            amount = float(amount_raw)
+            extra = parts[3:]
+
+            members = get_group_members(group)
+            if not members:
+                reply = f"⚠️ 找不到團體 {group}"
+            else:
+                per_person = round(amount / len(members), 2)
+                adjustments = {name: 0 for name in members}
+                for adj in extra:
+                    for name in members:
+                        if name in adj:
+                            if "+" in adj:
+                                adjustments[name] += float(adj.split("+")[1])
+                            elif "-" in adj:
+                                adjustments[name] -= float(adj.split("-")[1])
+                            break
+                total_adjustments = sum(adjustments.values())
+                if round(total_adjustments, 2) != 0:
+                    reply = f"⚠️ 金額加減不平衡，請確認總調整為 0 元"
+                else:
+                    for name in members:
+                        actual = per_person + adjustments[name]
+                        append_group_record(group, now, meal, meal, name, f"{name}:{actual}", actual, "")
+                    reply = f"✅ {group} 已分帳 {meal} {amount} 元（已自動計算加減）"
+
+        elif msg.startswith("查詢團體記帳 "):
+            group = msg.replace("查詢團體記帳 ", "")
             df = get_group_records_by_group(group)
             if df.empty:
                 reply = f"⚠️ 查無 {group} 資料"
             else:
-                payers, spenders = {}, {}
-                lines = []
-                for i, row in df.iterrows():
-                    date, meal, item, payer, members, amt = row["Date"], row["Meal"], row["Item"], row["Payer"], row["Members"], float(row["Amount"])
-                    lines.append(f"{i+1}. {date} {meal} {item} {members}（{amt}元）")
-                    payers[payer] = payers.get(payer, 0) + amt
-                    for m in members.split():
-                        if ":" in m:
-                            n, a = m.split(":")
-                            spenders[n] = spenders.get(n, 0) + float(a)
-                if msg.startswith("查明細"):
-                    reply = "📋 " + group + " 記錄：\n" + "\n".join(lines)
-                elif msg.startswith("查結算") or msg.startswith("查詢團體記帳"):
-                    reply = "📋 " + group + " 記錄：\n" + "\n".join(lines) + "\n\n💸 結算：\n"
-                    for n in sorted(set(payers) | set(spenders)):
-                        diff = round(spenders.get(n, 0) - payers.get(n, 0), 2)
-                        if diff > 0:
-                            reply += f"{n} 應付 {diff} 元\n"
-                        elif diff < 0:
-                            reply += f"{n} 應收 {-diff} 元\n"
-                        else:
-                            reply += f"{n} 無需補款\n"
+                total_spent = df["Amount"].sum()
+                fund = get_group_fund_balance(group)
+                lines = [f"{row['Date']} {row['Meal']} {row['Members']}（{row['Amount']}元）" for _, row in df.iterrows()]
+                reply = (
+                    f"📋 {group} 記錄：\n" +
+                    "\n".join(lines) +
+                    f"\n\n💰 公費總額：{fund:.2f} 元\n🧾 花費總額：{total_spent:.2f} 元\n"
+                    f"📉 剩餘金額：{fund - total_spent:.2f} 元"
+                )
 
         elif msg.startswith("刪除團體記帳 "):
             group = msg.replace("刪除團體記帳 ", "")
@@ -215,7 +228,7 @@ def handle_message(event):
             reply = f"✅ 已重設 {group} 所有記錄"
 
         else:
-            reply = "請輸入有效指令，輸入『指令說明』可查詢所有功能"
+            reply = "⚠️ 請輸入有效指令，或輸入『指令說明』"
 
     except Exception as e:
         reply = f"❌ 發生錯誤：{e}"
