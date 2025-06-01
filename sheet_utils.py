@@ -125,7 +125,7 @@ def create_group(group_name, members):
         return False  # 群組已存在
 
     members_str = ",".join(members)
-    sheet.append_row([group_name, members_str])
+    sheet.append_row([group_name, members_str])  # 第二欄應該是 Member
     return True
 
 def get_group_members(group_name):
@@ -137,7 +137,7 @@ def get_group_members(group_name):
     records = sheet.get_all_records()
     for r in records:
         if r["Group"] == group_name:
-            members = r.get("Members", "")
+            members = r.get("Member", "")
             if members:
                 return [m.strip() for m in members.split(",") if m.strip()]
             else:
@@ -153,7 +153,7 @@ def add_member(group_name, member):
     records = sheet.get_all_records()
     for i, r in enumerate(records, start=2):
         if r["Group"] == group_name:
-            members = r.get("Members", "")
+            members = r.get("Member", "")
             members_list = [m.strip() for m in members.split(",") if m.strip()]
             if member in members_list:
                 return True  # 已存在，視為成功
