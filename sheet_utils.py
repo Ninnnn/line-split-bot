@@ -166,6 +166,23 @@ def reset_personal_record_by_name(name):
     for row in filtered:
         sheet.append_row(row)
 
+def reset_group_record_by_group(group_name):
+    """
+    重置某一個群組的所有團體記帳紀錄，會刪除 group_records 中該群組的所有資料。
+    """
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
+    records = sheet.get_all_values()
+    if not records:
+        return False  # 空表格，無需操作
+
+    headers = records[0]
+    filtered = [row for row in records[1:] if row[0] != group_name]  # 第 0 欄是 Group 名稱
+    sheet.clear()
+    sheet.append_row(headers)
+    for row in filtered:
+        sheet.append_row(row)
+    return True
+
 def get_group_fund_summary(group_name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
     df = pd.DataFrame(sheet.get_all_records())
