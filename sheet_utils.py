@@ -147,6 +147,16 @@ def get_group_fund_balance_per_member(group_name):
     summary = df.groupby("Member")["Amount"].sum().to_dict()
     return summary
 
+def reset_personal_record_by_name(name):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
+    records = sheet.get_all_values()
+    headers = records[0]
+    filtered = [row for row in records[1:] if row[0] != name]
+    sheet.clear()
+    sheet.append_row(headers)
+    for row in filtered:
+        sheet.append_row(row)
+
 def get_group_fund_summary(group_name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
     df = pd.DataFrame(sheet.get_all_records())
