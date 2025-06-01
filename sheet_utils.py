@@ -16,6 +16,15 @@ def append_personal_record(name, item, amount, date, invoice_number=""):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     sheet.append_row([name, item, float(amount), date, invoice_number])
 
+def get_all_personal_records_by_user(name):
+    """
+    取得某使用者所有個人記帳記錄的 DataFrame，保留所有欄位，不做格式化。
+    可用於進一步篩選、統計或展示。
+    """
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
+    df = pd.DataFrame(sheet.get_all_records())
+    return df[df["Name"] == name].reset_index(drop=True)
+
 def get_personal_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
