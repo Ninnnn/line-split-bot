@@ -114,6 +114,82 @@ def delete_group_record_by_meal(group, date, meal):
         sheet.append_row(row)
     return True
 
+def create_group(group_name, members):
+    """
+    建立新群組，如果已存在則回傳 False。
+    members: list of str
+    """
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
+    groups = sheet.col_values(1)
+    if group_name in groups:
+        return False  # 群組已存在
+
+    members_str = ",".join(members)
+    sheet.append_row([group_name, members_str])
+    return True
+
+def get_group_members(group_name):
+    """
+    回傳該群組成員清單 (list of str)。
+    找不到群組回傳空 list。
+    """
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
+    records = sheet.get_all_records()
+    for r in records:
+        if r["Group"] == group_name:
+            members = r.get("Members", "")
+            if members:
+                return [m.strip() for m in members.split(",") if m.strip()]
+            else:
+                return []
+    return []
+
+def add_member(group_name, member):
+    """
+    新增成員到指定群組。
+    找不到群組回傳 False，成功回傳 True。
+    """
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
+    records = sheet.get_all_records()
+    for i, r in enumerate(records, start=2):
+        if r["Group"] == group_name:
+            members = r.get("Members", "")
+            members_list = [m.strip() for m in members.split(",") if m.strip()]
+            if member in members_list:
+                return True  # 已存在，視為成功
+            members_list.append(member)
+            new_members_str = ",".join(members_list)
+            sheet.update_cell(i, 2, new_members_str)
+            return True
+    return False
+
+def remove_member(group_name, member):
+    """
+    從指定群組移除成員。
+    找不到群組或成員回傳 False，成功回傳 True。
+    """
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
+    records = sheet.get_all_records()
+    for i, r in enumerate(records, start=2):
+        if r["Group"] == group_name:
+            members = r.get("Members", "")
+            members_list = [m.strip() for m in members.split(",") if m.strip()]
+            if member not in members_list:
+                return False  # 成員不存在
+            members_list.remove(member)
+            new_members_str = ",".join(members_list)
+            sheet.update_cell(i, 2, new_members_str)
+            return True
+    return False
+
+def get_group_list():
+    """
+    取得所有群組名稱列表 (list of str)。
+    """
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
+    records = sheet.get_all_records()
+    return sorted(list(set(r["Group"] for r in records)))
+
 # ===== 公費（群組基金）管理功能 =====
 def add_group_fund(group, member, amount, date=None):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
