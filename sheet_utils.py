@@ -172,7 +172,7 @@ def remove_member(group_name, member):
     records = sheet.get_all_records()
     for i, r in enumerate(records, start=2):
         if r["Group"] == group_name:
-            members = r.get("Members", "")
+            members = r.get("Member", "")
             members_list = [m.strip() for m in members.split(",") if m.strip()]
             if member not in members_list:
                 return False  # 成員不存在
