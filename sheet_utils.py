@@ -27,11 +27,7 @@ def get_personal_records_by_user(name):
     df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
     total = df["Amount"].sum()
 
-    formatted = df[["Name", "Item", "Amount", "Date", "Invoice"]].to_string(
-        index=False,
-        justify="left",
-        col_space=10
-    )
+    formatted = df[["Name", "Item", "Amount", "Date", "Invoice"]].to_string(index=False, justify="left", col_space=10)
     return formatted, total
 
 def get_all_personal_records_by_user(name):
@@ -139,7 +135,7 @@ def get_invoice_lottery_results(name):
     try:
         url = "https://invoice.etax.nat.gov.tw/invoice.json"
         res = requests.get(url)
-        award_data = res.json()[0]  # 只取最新一期
+        award_data = res.json()[0]  # 最新一期
         year_month = f"{award_data['year']}/{award_data['month']}"
 
         special = award_data["superPrizeNo"]
@@ -173,3 +169,28 @@ def get_invoice_lottery_results(name):
 
     except Exception as e:
         return f"❌ 發票查詢失敗：{e}"
+
+# ===== 群體與公費管理 =====
+def create_group(group_name, members):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
+    existing = pd.DataFrame(sheet.get_all_records())
+    for member in members:
+        if not ((existing["Group"] == group_name) & (existing["Member"] == member)).any():
+            sheet.append_row([group_name, member])
+
+def get_group_members(group_name):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
+    df = pd.DataFrame(sheet.get_all_records())
+    return df[df["Group"] == group_name]["Member"].tolist()
+
+def add_group_fund(group_name, member, amount):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
+    now = datetime.now().strftime("%Y/%m/%d")
+    sheet.append_row([group_name, member, float(amount), now])
+
+def get_group_fund_balance(group_name):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
+    df = pd.DataFrame(sheet.get_all_records())
+    df = df[df["Group"] == group_name]
+    df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
+    return df["Amount"].sum()
