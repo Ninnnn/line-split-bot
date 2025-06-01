@@ -1,5 +1,3 @@
-# app.py
-
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -126,8 +124,9 @@ def handle_message(event):
                 reply += "請回覆：刪除個人 1 或 刪除個人 1,2"
 
         elif msg.startswith("刪除個人 "):
-            parts = msg.replace("刪除個人 ", "").split(",")
-            success = all(delete_personal_record_by_index("", int(i)-1) for i in parts)
+            indexes = msg.replace("刪除個人 ", "").split(",")
+            name = ""  # 根據情境可能需要先取得當前處理中的人名
+            success = all(delete_personal_record_by_index(name, int(i)-1) for i in indexes)
             reply = "✅ 已刪除指定記錄" if success else "⚠️ 刪除失敗"
 
         elif msg.startswith("重設個人記帳 "):
@@ -163,10 +162,11 @@ def handle_message(event):
             group, meal, amount_raw = parts[0], parts[1], parts[2]
             amount = float(amount_raw)
             extra = parts[3:]
-
             members = get_group_members(group)
             if not members:
                 reply = f"⚠️ 找不到團體 {group}"
+            elif len(members) == 0:
+                reply = "⚠️ 團體沒有成員"
             else:
                 adjustments = {name: 0 for name in members}
                 for adj in extra:
@@ -177,13 +177,9 @@ def handle_message(event):
                             elif "-" in adj:
                                 adjustments[name] -= float(adj.split("-")[1])
                             break
-
                 total_adjustment = sum(adjustments.values())
                 base_amount = amount - total_adjustment
-
-                if len(members) == 0:
-                    reply = "⚠️ 沒有成員"
-                elif base_amount < 0:
+                if base_amount < 0:
                     reply = f"⚠️ 加總調整金額大於總金額，請確認指令"
                 else:
                     per_person_base = round(base_amount / len(members), 2)
