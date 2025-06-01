@@ -19,11 +19,15 @@ def append_personal_record(name, item, amount, date, invoice_number=""):
 def get_all_personal_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
+    if "Name" not in df:
+        return pd.DataFrame()
     return df[df["Name"] == name].reset_index(drop=True)
 
 def get_personal_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
+    if df.empty or "Name" not in df:
+        return "⚠️ 查無記錄", 0
     df = df[df["Name"] == name]
     if df.empty:
         return "⚠️ 查無記錄", 0
@@ -35,6 +39,8 @@ def get_personal_records_by_user(name):
 def delete_personal_record_by_index(name, index):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
+    if "Name" not in df:
+        return False
     records = df[df["Name"] == name]
     if index < 0 or index >= len(records):
         return False
@@ -50,6 +56,8 @@ def append_group_record(group, date, meal, item, payer, member_string, amount, i
 def get_group_records_by_group(group):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     df = pd.DataFrame(sheet.get_all_records())
+    if df.empty or "Group" not in df:
+        return pd.DataFrame()
     df = df[df["Group"] == group]
     df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
     return df
@@ -57,6 +65,8 @@ def get_group_records_by_group(group):
 def delete_group_record_by_meal(group, date, meal):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     df = pd.DataFrame(sheet.get_all_records())
+    if df.empty:
+        return False
     df_filtered = df[(df["Group"] == group) & (df["Date"] == date) & (df["Meal"] == meal)]
     if df_filtered.empty:
         return False
@@ -76,6 +86,8 @@ def append_invoice_record(name, invoice_number, date, amount):
 def get_invoice_records_by_user(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     df = pd.DataFrame(sheet.get_all_records())
+    if df.empty:
+        return pd.DataFrame()
     df = df[(df["Name"] == name) & (df["Invoice"] != "")]
     df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
     return df
@@ -87,16 +99,17 @@ def get_invoice_lottery_results(name):
     invoice_list = df[["Date", "Invoice"]].dropna().to_dict(orient="records")
     try:
         url = "https://invoice.etax.nat.gov.tw/invoice.json"
-        res = requests.get(url)
+        res = requests.get(url, timeout=5)
         award_data = res.json()[0]
         year_month = f"{award_data['year']}/{award_data['month']}"
-        special = award_data["superPrizeNo"]
-        grand = award_data["spcPrizeNo"]
-        first = award_data["firstPrize"]
-        additional = award_data["sixPrize"]
+        special = award_data.get("superPrizeNo", "")
+        grand = award_data.get("spcPrizeNo", "")
+        first = award_data.get("firstPrize", [])
+        additional = award_data.get("sixPrize", [])
         results = f"📬 {name} 的中獎查詢（{year_month}）：\n"
         for entry in invoice_list:
             num, date = entry["Invoice"], entry["Date"]
+            matched = "未中獎"
             if num == special:
                 matched = "特別獎 💰"
             elif num == grand:
@@ -107,8 +120,6 @@ def get_invoice_lottery_results(name):
                 matched = "六獎"
             elif any(num[-3:] == a for a in additional):
                 matched = "六獎（增開）"
-            else:
-                matched = "未中獎"
             results += f"{date} - {num} ➜ {matched}\n"
         return results
     except Exception as e:
@@ -181,6 +192,8 @@ def get_group_fund_history(group_name, member):
 def reset_personal_record_by_name(name):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("personal_records")
     records = sheet.get_all_values()
+    if not records:
+        return
     headers = records[0]
     filtered = [row for row in records[1:] if row[0] != name]
     sheet.clear()
