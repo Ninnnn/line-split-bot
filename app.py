@@ -15,7 +15,7 @@ from sheet_utils import (
     delete_group_record_by_index, get_invoice_records_by_user,
     get_invoice_lottery_results, append_invoice_record,
     delete_group_record_by_meal, create_group, add_group_fund,
-    get_group_fund_balance, get_group_members
+    get_group_fund_balance, get_group_members, get_group_fund_history
 )
 from vision_utils import extract_and_process_invoice
 
@@ -65,8 +65,9 @@ def handle_message(event):
                 "📍 團體記帳與公費\n"
                 "建立團體記帳 名古屋 小明 小花 小強\n"
                 "儲值公費 名古屋 3000\n"
-                "分帳 名古屋 早餐 1000 小明+100 小花-100\n"
                 "查詢團體記帳 名古屋\n"
+                "查詢公費紀錄 名古屋\n"
+                "分帳 名古屋 早餐 1000 小明+300 小強-100\n"
                 "刪除團體記帳 名古屋\n"
                 "刪除團體 名古屋 1 或 刪除團體 名古屋 1,2\n"
                 "刪除餐別 名古屋 2025/06/01 早餐\n"
@@ -150,8 +151,12 @@ def handle_message(event):
             else:
                 split_amount = round(amount / len(members), 2)
                 for member in members:
-                    add_group_fund(group_name, member, split_amount)
+                    add_group_fund(group_name, member, split_amount, now)
                 reply = f"✅ 團體 {group_name} 公費儲值 {amount} 元（每人 {split_amount} 元）"
+
+        elif msg.startswith("查詢公費紀錄 "):
+            group = msg.replace("查詢公費紀錄 ", "")
+            reply = get_group_fund_history(group)
 
         elif msg.startswith("分帳 "):
             parts = msg.replace("分帳 ", "").split()
@@ -185,7 +190,7 @@ def handle_message(event):
                     breakdown = []
                     for name in members:
                         actual_amount = round(per_person_base + adjustments[name], 2)
-                        append_group_record(group, now, meal, f"{meal}", name, f"{name}:{actual_amount}", actual_amount, "")
+                        append_group_record(group, now, meal, meal, name, f"{name}:{actual_amount}", actual_amount, "")
                         breakdown.append(f"{name}:{actual_amount}")
                     reply = (
                         f"✅ {group} 已分帳 {meal} {amount} 元\n" +
