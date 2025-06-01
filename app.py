@@ -154,43 +154,43 @@ def handle_message(event):
                 reply = f"✅ 團體 {group_name} 公費儲值 {amount} 元（每人 {split_amount} 元）"
 
         elif msg.startswith("分帳 "):
-    parts = msg.replace("分帳 ", "").split()
-    group, meal, amount_raw = parts[0], parts[1], parts[2]
-    amount = float(amount_raw)
-    extra = parts[3:]  # 例如：["寧+300"]
+            parts = msg.replace("分帳 ", "").split()
+            group, meal, amount_raw = parts[0], parts[1], parts[2]
+            amount = float(amount_raw)
+            extra = parts[3:]
 
-    members = get_group_members(group)
-    if not members:
-        reply = f"⚠️ 找不到團體 {group}"
-    else:
-        adjustments = {name: 0 for name in members}
-        for adj in extra:
-            for name in members:
-                if name in adj:
-                    if "+" in adj:
-                        adjustments[name] += float(adj.split("+")[1])
-                    elif "-" in adj:
-                        adjustments[name] -= float(adj.split("-")[1])
-                    break
+            members = get_group_members(group)
+            if not members:
+                reply = f"⚠️ 找不到團體 {group}"
+            else:
+                adjustments = {name: 0 for name in members}
+                for adj in extra:
+                    for name in members:
+                        if name in adj:
+                            if "+" in adj:
+                                adjustments[name] += float(adj.split("+")[1])
+                            elif "-" in adj:
+                                adjustments[name] -= float(adj.split("-")[1])
+                            break
 
-        total_adjustment = sum(adjustments.values())
-        base_amount = amount - total_adjustment
+                total_adjustment = sum(adjustments.values())
+                base_amount = amount - total_adjustment
 
-        if len(members) == 0:
-            reply = "⚠️ 沒有成員"
-        elif base_amount < 0:
-            reply = f"⚠️ 加總調整金額大於總金額，請確認指令"
-        else:
-            per_person_base = round(base_amount / len(members), 2)
-            breakdown = []
-            for name in members:
-                actual_amount = round(per_person_base + adjustments[name], 2)
-                append_group_record(group, now, meal, f"{meal}", name, f"{name}:{actual_amount}", actual_amount, "")
-                breakdown.append(f"{name}:{actual_amount}")
-            reply = (
-                f"✅ {group} 已分帳 {meal} {amount} 元\n" +
-                f"📊 分帳結果：{'、'.join(breakdown)}"
-            )
+                if len(members) == 0:
+                    reply = "⚠️ 沒有成員"
+                elif base_amount < 0:
+                    reply = f"⚠️ 加總調整金額大於總金額，請確認指令"
+                else:
+                    per_person_base = round(base_amount / len(members), 2)
+                    breakdown = []
+                    for name in members:
+                        actual_amount = round(per_person_base + adjustments[name], 2)
+                        append_group_record(group, now, meal, f"{meal}", name, f"{name}:{actual_amount}", actual_amount, "")
+                        breakdown.append(f"{name}:{actual_amount}")
+                    reply = (
+                        f"✅ {group} 已分帳 {meal} {amount} 元\n" +
+                        f"📊 分帳結果：{'、'.join(breakdown)}"
+                    )
 
         elif msg.startswith("查詢團體記帳 "):
             group = msg.replace("查詢團體記帳 ", "")
