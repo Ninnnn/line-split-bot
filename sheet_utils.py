@@ -114,7 +114,7 @@ def delete_group_record_by_meal(group, date, meal):
         sheet.append_row(row)
     return True
 
-def create_group(group_name, members):
+def create_group(group_name, members, group_id=None):
     """
     建立新群組，如果已存在則回傳 False。
     members: list of str
@@ -125,7 +125,10 @@ def create_group(group_name, members):
         return False  # 群組已存在
 
     members_str = ",".join(members)
-    sheet.append_row([group_name, members_str])  # 第二欄應該是 Member
+    if group_id:
+        sheet.append_row([group_name, group_id, members_str])
+    else:
+        sheet.append_row([group_name, "", members_str])
     return True
 
 def get_group_members(group_name):
