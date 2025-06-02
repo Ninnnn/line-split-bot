@@ -137,8 +137,13 @@ def handle_message(event):
         elif msg.startswith("建立團體記帳 "):
             parts = msg.replace("建立團體記帳 ", "").split()
             group_name, members = parts[0], parts[1:]
-            create_group(group_name, members)
-            reply = f"✅ 已建立團體 {group_name}，成員：{'、'.join(members)}"
+            source = event.source
+            group_id = source.group_id if hasattr(source, 'group_id') else None
+            if not group_id:
+                reply = "⚠️ 請在群組中使用此指令"
+            else:
+                create_group(group_name, members, group_id)
+                reply = f"✅ 已建立團體 {group_name}，成員：{'、'.join(members)}"
 
         elif msg.startswith("儲值公費 "):
             parts = msg.replace("儲值公費 ", "").split()
