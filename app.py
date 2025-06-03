@@ -13,7 +13,8 @@ from sheet_utils import (
     delete_group_record_by_index, get_invoice_records_by_user,
     get_invoice_lottery_results, append_invoice_record,
     delete_group_record_by_meal, create_group, add_group_fund,
-    get_group_fund_balance, get_group_members, get_group_fund_history
+    get_group_fund_balance, get_group_members, get_group_fund_history,
+    get_group_fund_summary
 )
 from vision_utils import extract_and_process_invoice
 
@@ -63,6 +64,7 @@ def handle_message(event):
                 "📍 團體記帳與公費\n"
                 "建立團體記帳 名古屋 小明 小花 小強\n"
                 "儲值公費 名古屋 3000\n"
+                "儲值公費 名古屋 小明+300 小花+200\n"
                 "查詢團體記帳 名古屋\n"
                 "查詢公費紀錄 名古屋\n"
                 "分帳 名古屋 早餐 1000 小明+300 小強-100\n"
@@ -125,7 +127,7 @@ def handle_message(event):
 
         elif msg.startswith("刪除個人 "):
             indexes = msg.replace("刪除個人 ", "").split(",")
-            name = ""  # 根據情境可能需要先取得當前處理中的人名
+            name = ""  # 這裡應該補上當前操作的使用者名稱（或設計交互流程記錄該名稱）
             success = all(delete_personal_record_by_index(name, int(i)-1) for i in indexes)
             reply = "✅ 已刪除指定記錄" if success else "⚠️ 刪除失敗"
 
@@ -148,15 +150,25 @@ def handle_message(event):
         elif msg.startswith("儲值公費 "):
             parts = msg.replace("儲值公費 ", "").split()
             group_name = parts[0]
-            amount = float(parts[1])
             members = get_group_members(group_name)
             if not members:
                 reply = f"⚠️ 找不到團體 {group_name}"
             else:
-                split_amount = round(amount / len(members), 2)
-                for member in members:
-                    add_group_fund(group_name, member, split_amount, now)
-                reply = f"✅ 團體 {group_name} 公費儲值 {amount} 元（每人 {split_amount} 元）"
+                contributions = {}
+                if len(parts) == 2:
+                    total = float(parts[1])
+                    per_person = round(total / len(members), 2)
+                    for m in members:
+                        contributions[m] = per_person
+                else:
+                    for item in parts[1:]:
+                        if "+" in item:
+                            name, amt = item.split("+")
+                            if name in members:
+                                contributions[name] = contributions.get(name, 0) + float(amt)
+                for m, amt in contributions.items():
+                    add_group_fund(group_name, m, amt, now)
+                reply = f"✅ {group_name} 公費儲值完成：\n" + "\n".join([f"{k} +{v}" for k, v in contributions.items()])
 
         elif msg.startswith("查詢公費紀錄 "):
             group = msg.replace("查詢公費紀錄 ", "")
@@ -206,12 +218,23 @@ def handle_message(event):
             else:
                 total_spent = df["Amount"].sum()
                 fund = get_group_fund_balance(group)
+                member_balances = {}
+                for member in get_group_members(group):
+                    balance = get_group_fund_balance(group, member)
+                    member_balances[member] = balance
+
+                balance_lines = "\n".join([f"{name}：{bal:.2f} 元" for name, bal in member_balances.items()])
+                topup_suggestions = "\n".join([
+                    f"{name} 應補 {abs(bal):.0f} 元" for name, bal in member_balances.items() if bal < 0
+                ]) or "無需補錢"
+
                 lines = [f"{row['Date']} {row['Meal']} {row['Members']}（{row['Amount']}元）" for _, row in df.iterrows()]
                 reply = (
                     f"📋 {group} 記錄：\n" +
                     "\n".join(lines) +
-                    f"\n\n💰 公費總額：{fund:.2f} 元\n🧾 花費總額：{total_spent:.2f} 元\n"
-                    f"📉 剩餘金額：{fund - total_spent:.2f} 元"
+                    f"\n\n💰 公費總額：{fund:.2f} 元\n🧾 花費總額：{total_spent:.2f} 元\n" +
+                    f"📉 剩餘金額：{fund - total_spent:.2f} 元\n\n" +
+                    f"👥 各成員餘額：\n{balance_lines}\n\n📈 儲值建議：\n{topup_suggestions}"
                 )
 
         elif msg.startswith("刪除團體記帳 "):
