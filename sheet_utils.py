@@ -258,6 +258,34 @@ def calculate_group_fund_balances(group_id):
 
     return balances
 
+def read_group_fund(group_id):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
+    records = sheet.get_all_records()
+    return [
+        {"name": r["Member"], "amount": float(r["Amount"])}
+        for r in records if r["Group"] == group_id
+    ]
+
+def read_group_records(group_id):
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
+    df = pd.DataFrame(sheet.get_all_records())
+    df = df[df["Group"] == group_id]
+    records = []
+    for _, row in df.iterrows():
+        members_str = row.get("Members") or row.get("MemberString", "")
+        member_amounts = {}
+        for part in members_str.split(","):
+            part = part.strip()
+            if "+" in part:
+                name, adj = part.split("+")
+                member_amounts[name.strip()] = float(adj.strip())
+            else:
+                member_amounts[part] = 0.0
+        records.append({"members": member_amounts})
+    return records
+
+
+
 
 # ===== 發票功能 =====
 def append_invoice_record(name, invoice_number, date, amount):
