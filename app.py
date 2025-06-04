@@ -217,11 +217,15 @@ def handle_message(event):
                 reply = f"⚠️ 查無 {group} 資料"
             else:
                 total_spent = df["Amount"].sum()
-                fund = get_group_fund_balance(group)
+                members = get_group_members(group)
                 member_balances = {}
-                for member in get_group_members(group):
+                for member in members:
                     balance = get_group_fund_balance(group, member)
+                    if balance is None:
+                        balance = 0  # 防止回傳 None 錯誤
                     member_balances[member] = balance
+
+                fund = sum(member_balances.values())  # 總公費從所有成員餘額加總
 
                 balance_lines = "\n".join([f"{name}：{bal:.2f} 元" for name, bal in member_balances.items()])
                 topup_suggestions = "\n".join([
