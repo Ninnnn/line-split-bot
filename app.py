@@ -217,29 +217,36 @@ def handle_message(event):
                 reply = f"⚠️ 查無 {group} 資料"
             else:
                 total_spent = df["Amount"].sum()
-                members = get_group_members(group)
-                member_balances = {}
-                for member in members:
-                    balance = get_group_fund_balance(group, member)
-                    if balance is None:
-                        balance = 0  # 防止回傳 None 錯誤
-                    member_balances[member] = balance
+                group_id = get_group_id(group)
+                balances = calculate_group_fund_balances(group_id)
 
-                fund = sum(member_balances.values())  # 總公費從所有成員餘額加總
+                suggestions = []
+                for name, info in balances.items():
+                    if info['balance'] < 0:
+                        suggestions.append(f"{name} 補 {-info['balance']:.0f} 元")
+                        
+                    if suggestions:
+                        suggestion_msg = '\n'.join(suggestions)
+                    else:
+                        suggestion_msg = "無需補錢"
 
-                balance_lines = "\n".join([f"{name}：{bal:.2f} 元" for name, bal in member_balances.items()])
-                topup_suggestions = "\n".join([
-                    f"{name} 應補 {abs(bal):.0f} 元" for name, bal in member_balances.items() if bal < 0
-                ]) or "無需補錢"
+                    lines = [
+                        f"{row['Date']} {row['Meal']} {row['Members']}（{row['Amount']}元）"
+                        for _, row in df.iterrows()
+                    ]
+                    
+                    total_fund = sum(info['topup'] for info in balances.values())
+                    reply = (
+                        f"📋 {group} 記錄：\n" +
+                        "\n".join(lines) +
+                        f"\n\n💰 公費總額：{total_fund:.2f} 元\n🧾 花費總額：{total_spent:.2f} 元\n" +
+                        f"📉 剩餘金額：{total_fund - total_spent:.2f} 元"
+                    )
+                    reply += f"\n\n📈 儲值建議：\n{suggestion_msg}"
 
-                lines = [f"{row['Date']} {row['Meal']} {row['Members']}（{row['Amount']}元）" for _, row in df.iterrows()]
-                reply = (
-                    f"📋 {group} 記錄：\n" +
-                    "\n".join(lines) +
-                    f"\n\n💰 公費總額：{fund:.2f} 元\n🧾 花費總額：{total_spent:.2f} 元\n" +
-                    f"📉 剩餘金額：{fund - total_spent:.2f} 元\n\n" +
-                    f"👥 各成員餘額：\n{balance_lines}\n\n📈 儲值建議：\n{topup_suggestions}"
-                )
+                    reply += "\n\n👥 各成員餘額："
+                    for name, info in balances.items():
+                        reply += f"\n{name}：{info['balance']:.2f} 元"
 
         elif msg.startswith("刪除團體記帳 "):
             group = msg.replace("刪除團體記帳 ", "")
