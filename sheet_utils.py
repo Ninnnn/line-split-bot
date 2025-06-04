@@ -57,7 +57,7 @@ def delete_personal_record_by_index(name, index):
     if index < 0 or index >= len(records):
         return False
 
-    row_number = records.index[index] + 2  # +2 因為 header 在第一列，DataFrame index 從0開始
+    row_number = records.index[index] + 2
     sheet.delete_rows(row_number)
     return True
 
@@ -115,14 +115,10 @@ def delete_group_record_by_meal(group, date, meal):
     return True
 
 def create_group(group_name, members, group_id=None):
-    """
-    建立新群組，如果已存在則回傳 False。
-    members: list of str
-    """
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
     groups = sheet.col_values(1)
     if group_name in groups:
-        return False  # 群組已存在
+        return False
 
     members_str = ",".join(members)
     if group_id:
@@ -132,10 +128,6 @@ def create_group(group_name, members, group_id=None):
     return True
 
 def get_group_members(group_name):
-    """
-    回傳該群組成員清單 (list of str)。
-    找不到群組回傳空 list。
-    """
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
     records = sheet.get_all_records()
     for r in records:
@@ -148,10 +140,6 @@ def get_group_members(group_name):
     return []
 
 def add_member(group_name, member):
-    """
-    新增成員到指定群組。
-    找不到群組回傳 False，成功回傳 True。
-    """
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
     records = sheet.get_all_records()
     for i, r in enumerate(records, start=2):
@@ -159,7 +147,7 @@ def add_member(group_name, member):
             members = r.get("Member", "")
             members_list = [m.strip() for m in members.split(",") if m.strip()]
             if member in members_list:
-                return True  # 已存在，視為成功
+                return True
             members_list.append(member)
             new_members_str = ",".join(members_list)
             sheet.update_cell(i, 2, new_members_str)
@@ -167,10 +155,6 @@ def add_member(group_name, member):
     return False
 
 def remove_member(group_name, member):
-    """
-    從指定群組移除成員。
-    找不到群組或成員回傳 False，成功回傳 True。
-    """
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
     records = sheet.get_all_records()
     for i, r in enumerate(records, start=2):
@@ -178,7 +162,7 @@ def remove_member(group_name, member):
             members = r.get("Member", "")
             members_list = [m.strip() for m in members.split(",") if m.strip()]
             if member not in members_list:
-                return False  # 成員不存在
+                return False
             members_list.remove(member)
             new_members_str = ",".join(members_list)
             sheet.update_cell(i, 2, new_members_str)
@@ -186,9 +170,6 @@ def remove_member(group_name, member):
     return False
 
 def get_group_list():
-    """
-    取得所有群組名稱列表 (list of str)。
-    """
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("groups")
     records = sheet.get_all_records()
     return sorted(list(set(r["Group"] for r in records)))
@@ -239,18 +220,13 @@ def delete_group_record_by_index_fund(group, index):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
     records = sheet.get_all_records()
     count = 0
-    for i, r in enumerate(records, start=2):  # Google Sheets 實際列數（含標題列）
+    for i, r in enumerate(records, start=2):
         if r["Group"] == group:
             if count == index:
                 sheet.delete_rows(i)
                 return True
             count += 1
     return False
-
-def get_group_list():
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
-    records = sheet.get_all_records()
-    return sorted(list(set(r["Group"] for r in records)))
 
 # ===== 發票功能 =====
 def append_invoice_record(name, invoice_number, date, amount):
@@ -277,7 +253,7 @@ def get_invoice_lottery_results(name):
     try:
         url = "https://invoice.etax.nat.gov.tw/invoice.json"
         res = requests.get(url)
-        award_data = res.json()[0]  # 最新一期發票中獎資料
+        award_data = res.json()[0]
         year_month = f"{award_data['year']}/{award_data['month']}"
 
         special = award_data["superPrizeNo"]
