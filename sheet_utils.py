@@ -228,6 +228,37 @@ def delete_group_record_by_index_fund(group, index):
             count += 1
     return False
 
+def calculate_group_fund_balances(group_id):
+    """
+    回傳 dict：{
+        '小明': {'top_up': 3000, 'deducted': 1750, 'balance': 1250},
+        '小花': {...},
+        ...
+    }
+    """
+    fund_data = read_group_fund(group_id)
+    spend_data = read_group_records(group_id)
+
+    balances = {}
+    for name in get_group_members(group_id):
+        balances[name] = {'top_up': 0.0, 'deducted': 0.0, 'balance': 0.0}
+
+    for record in fund_data:
+        name, amount = record['name'], float(record['amount'])
+        if name in balances:
+            balances[name]['top_up'] += amount
+
+    for record in spend_data:
+        for member, amount in record['members'].items():
+            if member in balances:
+                balances[member]['deducted'] += float(amount)
+
+    for name in balances:
+        balances[name]['balance'] = balances[name]['top_up'] - balances[name]['deducted']
+
+    return balances
+
+
 # ===== 發票功能 =====
 def append_invoice_record(name, invoice_number, date, amount):
     append_personal_record(name, "發票補登", float(amount), date, invoice_number)
