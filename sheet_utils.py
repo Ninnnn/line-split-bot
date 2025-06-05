@@ -207,14 +207,23 @@ def get_group_fund_summary(group):
             summary[member] += r["Amount"]
     return summary
 
-def get_group_fund_history(group, member=None):
-    sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
-    records = sheet.get_all_records()
-    filtered = [
-        r for r in records
-        if r["Group"] == group and (member is None or r["Member"] == member)
-    ]
-    return filtered
+def get_group_fund_balance_summary(group):
+    balances = calculate_group_fund_balances(group)
+    lines = [f"📊【{group}】公費結餘狀況："]
+    for name, data in balances.items():
+        lines.append(f"{name} ➜ 儲值 {data['top_up']} 元，扣款 {data['deducted']} 元，剩餘 {data['balance']} 元")
+    return "\n".join(lines)
+
+
+def format_group_fund_history(group, member=None):
+    history = get_group_fund_history(group, member)
+    if not history:
+        return "⚠️ 查無記錄"
+    lines = [f"📜【{group}】{' - ' + member if member else ''} 公費記錄："]
+    for r in history:
+        sign = "+" if r["Type"] == "topup" else "-"
+        lines.append(f"{r['Date']} | {r['Member']} {sign}{abs(r['Amount'])} 元")
+    return "\n".join(lines)
 
 def delete_group_record_by_index_fund(group, index):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_funds")
@@ -227,6 +236,36 @@ def delete_group_record_by_index_fund(group, index):
                 return True
             count += 1
     return False
+
+def preview_group_fund_history_for_delete(group):
+    history = get_group_fund_history(group)
+    lines = [f"🧾【{group}】公費記錄索引列表："]
+    for i, r in enumerate(history):
+        lines.append(f"{i}. {r['Date']} | {r['Member']} | {r['Type']} | {r['Amount']} 元")
+    return "\n".join(lines)
+
+def preview_group_record_for_delete(group):
+    df = get_group_records_by_group(group)
+    if df.empty:
+        return "⚠️ 無記錄"
+    lines = [f"🧾【{group}】記帳記錄索引列表："]
+    for i, row in df.iterrows():
+        lines.append(f"{i}. {row['Date']} {row['Meal']} - {row['Item']}（{row['Amount']} 元）by {row['Payer']}")
+    return "\n".join(lines)
+
+def suggest_topup_for_group(group):
+    balances = calculate_group_fund_balances(group)
+    avg = sum(data["top_up"] for data in balances.values()) / len(balances)
+    suggestions = []
+    for name, data in balances.items():
+        diff = round(avg - data["top_up"])
+        if diff > 0:
+            suggestions.append(f"{name} 建議補儲 {diff} 元")
+    if not suggestions:
+        return "✅ 所有成員儲值均衡，無需補儲"
+    return "📌 公費補儲建議：\n" + "\n".join(suggestions)
+
+
 
 def calculate_group_fund_balances(group_id):
     """
