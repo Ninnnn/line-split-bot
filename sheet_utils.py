@@ -73,6 +73,15 @@ def get_group_records_by_group(group):
     df["Amount"] = pd.to_numeric(df["Amount"], errors="coerce").fillna(0)
     return df
 
+def get_group_id(group_name):
+    sheet = client.open(SHEET_NAME).worksheet('groups')
+    data = sheet.get_all_records()
+    for row in data:
+        if row['group_name'] == group_name:
+            return row['group_id']
+    return None
+
+
 def reset_group_record_by_group(group):
     sheet = client.open_by_key(SPREADSHEET_ID).worksheet("group_records")
     records = sheet.get_all_values()
