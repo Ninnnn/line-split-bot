@@ -14,7 +14,7 @@ from sheet_utils import (
     get_invoice_lottery_results, append_invoice_record,
     delete_group_record_by_meal, create_group, add_group_fund,
     get_group_fund_balance, get_group_members, get_group_fund_history,
-    get_group_fund_summary
+    get_group_fund_summary, get_group_id
 )
 from vision_utils import extract_and_process_invoice
 
