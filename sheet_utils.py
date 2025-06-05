@@ -74,7 +74,7 @@ def get_group_records_by_group(group):
     return df
 
 def get_group_id(group_name):
-    sheet = client.open(SHEET_NAME).worksheet('groups')
+    sheet = client.open_by_key(SPREADSHEET_ID).worksheet('groups')
     data = sheet.get_all_records()
     for row in data:
         if row['group_name'] == group_name:
