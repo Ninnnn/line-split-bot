@@ -207,6 +207,13 @@ def get_group_fund_summary(group):
             summary[member] += r["Amount"]
     return summary
 
+def get_group_fund_history(group_name):
+    sheet = get_worksheet("group_fund_records")
+    records = sheet.get_all_records()
+    history = [r for r in records if r["群組"] == group_name]
+    return history
+
+
 def get_group_fund_balance_summary(group):
     balances = calculate_group_fund_balances(group)
     lines = [f"📊【{group}】公費結餘狀況："]
