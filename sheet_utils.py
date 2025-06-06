@@ -1,9 +1,8 @@
-# sheet_utils.py (只保留團體記帳與公費管理功能，修正命名與功能一致性，與 app.py 對應)
-
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import pandas as pd
 from datetime import datetime
+import re
 
 # ==== Google Sheets 認證與初始化 ====
 
@@ -118,6 +117,33 @@ def deduct_group_fund(group, deductions):
     for member, amount in deductions.items():
         append_group_fund_record(group, member, amount, 'deduct')
 
+def top_up_group_fund(group, amount=None, contributions=None):
+    members = get_group_members(group)
+    if not members:
+        return "❗查無團體成員"
+
+    if contributions:  # 個別儲值
+        try:
+            for item in contributions:
+                match = re.match(r"(\S+)\+(\d+)", item)
+                if not match:
+                    continue
+                name, value = match.groups()
+                if name not in members:
+                    continue
+                append_group_fund_record(group, name, int(value), 'topup')
+            return f"✅【{group}】已記錄個別儲值"
+        except:
+            return "❗儲值格式錯誤，請使用：小明+300 小花+200"
+
+    elif amount:  # 平均儲值
+        avg = round(amount / len(members))
+        for m in members:
+            append_group_fund_record(group, m, avg, 'topup')
+        return f"✅【{group}】每人平均儲值 {avg} 元"
+
+    return "❗請提供儲值金額或明細"
+
 # ==== 整體查詢整合 ====
 
 def get_group_fund_summary(group):
@@ -133,3 +159,8 @@ def get_group_fund_summary(group):
         result.append(f"{m}：目前 {paid:.0f} 元，{status}")
     result.append(f"💼 公費總額：{total:.0f} 元")
     return "\n".join(result)
+
+# ==== Alias for app.py 對接 ====
+
+query_group_records = get_group_records
+query_group_fund_history = format_group_fund_history
