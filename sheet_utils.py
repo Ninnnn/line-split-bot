@@ -6,7 +6,7 @@ import re
 
 # ==== Google Sheets 認證與初始化 ====
 
-SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE'
+SPREADSHEET_ID = '1lC2baFstZ51E3iT_29N8KOfMoknrHMleSzTKx2emZ94'
 scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', scope)
 client = gspread.authorize(creds)
