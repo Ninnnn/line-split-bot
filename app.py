@@ -5,8 +5,9 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
 import re
 from sheet_utils import (
-    create_group, split_group_expense, query_group_records,
-    top_up_group_fund, query_group_fund_history, delete_group_meal, reset_group_records
+    create_group, query_group_records,
+    top_up_group_fund, query_group_fund_history, delete_group_meal, reset_group_records,
+    append_group_record, get_group_members
 )
 
 app = Flask(__name__)
@@ -44,6 +45,34 @@ HELP_MESSAGE = """
 7. 🔄 重設團體記帳
 重設團體記帳 [團名]
 """
+
+def split_group_expense(group_name, meal_name, total_amount, adjustments_raw):
+    adjustments = {}
+    for item in adjustments_raw:
+        match = re.match(r"(\S+)([+-]\d+)", item)
+        if match:
+            name, offset = match.groups()
+            adjustments[name] = adjustments.get(name, 0) + int(offset)
+        else:
+            raise ValueError(f"格式錯誤：{item}，請使用人名+/-金額，例如 寧+300")
+
+    members = get_group_members(group_name)
+    n = len(members)
+    if n == 0:
+        raise ValueError("❗找不到團體成員")
+
+    total_adjustment = sum(adjustments.get(name, 0) for name in members)
+    adjusted_total = total_amount - total_adjustment
+    share = round(adjusted_total / n)
+
+    contributions = {}
+    for m in members:
+        offset = adjustments.get(m, 0)
+        contributions[m] = share + offset
+
+    append_group_record(group_name, meal_name, total_amount, contributions)
+    detail = "\n".join(f"{m}：{contributions[m]:.0f}" for m in members)
+    return f"✅ {group_name} 已分帳 {meal_name}：\n{detail}"
 
 @app.route("/callback", methods=['POST'])
 def callback():
