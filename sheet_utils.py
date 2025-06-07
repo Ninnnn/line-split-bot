@@ -34,6 +34,16 @@ def get_group_members(group_name):
             return r['members'].split(',')
     return []
 
+def top_up_group_fund(group_name, amounts):
+    sheet = get_worksheet(group_name)
+    today = datetime.datetime.now().strftime('%Y-%m-%d')
+
+    for name, amount in amounts.items():
+        sheet.append_row([today, '儲值', name, int(amount)])
+    
+    return f"✅ 已為 {group_name} 儲值：\n" + "\n".join([f"{k} +{v}" for k, v in amounts.items()])
+
+
 def query_group_records(group_name):
     sheet = get_worksheet(group_name)
     records = sheet.get_all_records()
