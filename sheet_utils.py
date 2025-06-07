@@ -34,6 +34,11 @@ def get_group_members(group_name):
             return r['members'].split(',')
     return []
 
+def query_group_records(group_name):
+    sheet = get_worksheet(group_name)
+    records = sheet.get_all_records()
+    return records
+
 def append_group_record(group, meal, amount, payer, adjustments):
     sheet = get_worksheet(group)
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
