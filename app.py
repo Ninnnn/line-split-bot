@@ -5,9 +5,10 @@ from linebot.models import MessageEvent, TextMessage, TextSendMessage
 import os
 import re
 from sheet_utils import (
-    create_group, query_group_records,
-    top_up_group_fund, query_group_fund_history, delete_group_meal, reset_group_records,
-    append_group_record, get_group_members
+    create_group, get_group_members, append_group_record, split_group_expense,
+    top_up_group_fund, format_group_fund_history,
+    delete_group_meal, reset_group_records,
+    format_group_fund_balance, suggest_group_fund_topup
 )
 
 app = Flask(__name__)
@@ -46,34 +47,6 @@ HELP_MESSAGE = """
 重設團體記帳 [團名]
 """
 
-def split_group_expense(group_name, meal_name, total_amount, adjustments_raw):
-    adjustments = {}
-    for item in adjustments_raw:
-        match = re.match(r"(\S+)([+-]\d+)", item)
-        if match:
-            name, offset = match.groups()
-            adjustments[name] = adjustments.get(name, 0) + int(offset)
-        else:
-            raise ValueError(f"格式錯誤：{item}，請使用人名+/-金額，例如 寧+300")
-
-    members = get_group_members(group_name)
-    n = len(members)
-    if n == 0:
-        raise ValueError("❗找不到團體成員")
-
-    total_adjustment = sum(adjustments.get(name, 0) for name in members)
-    adjusted_total = total_amount - total_adjustment
-    share = round(adjusted_total / n)
-
-    contributions = {}
-    for m in members:
-        offset = adjustments.get(m, 0)
-        contributions[m] = share + offset
-
-    append_group_record(group_name, meal_name, total_amount, contributions)
-    detail = "\n".join(f"{m}：{contributions[m]:.0f}" for m in members)
-    return f"✅ {group_name} 已分帳 {meal_name}：\n{detail}"
-
 @app.route("/callback", methods=['POST'])
 def callback():
     signature = request.headers['X-Line-Signature']
@@ -101,6 +74,10 @@ def handle_message(event):
                 group_name = args[1]
                 members = args[2:]
                 result = create_group(group_name, members)
+                if result:
+                    result = f"✅ 已建立團體：{group_name}"
+                else:
+                    result = f"⚠️ 團體 {group_name} 已存在"
 
         elif text.startswith("分帳"):
             pattern = r"分帳 (\S+) (\S+) (\d+)(.*)"
@@ -120,8 +97,9 @@ def handle_message(event):
             if len(parts) < 2:
                 result = "❗請提供團名，例如：查詢團體記帳 大阪"
             else:
+                from sheet_utils import get_group_records  # 延遲導入避免循環引用
                 group_name = parts[1]
-                result = query_group_records(group_name)
+                result = get_group_records(group_name)
 
         elif text.startswith("儲值公費"):
             parts = text.split()
@@ -136,7 +114,7 @@ def handle_message(event):
                     contributions = parts[2:]
                     result = top_up_group_fund(group_name, contributions=contributions)
                 else:
-                    result = "❗請提供總金額或個人儲值明細，例如：儲值公費 大阪 3000 或 儲值公費 大阪 小明+500"
+                    result = "❗請提供總金額或個人儲值明細"
 
         elif text.startswith("查詢公費紀錄"):
             parts = text.split()
@@ -144,12 +122,12 @@ def handle_message(event):
                 result = "❗請提供團名，例如：查詢公費紀錄 大阪"
             else:
                 group_name = parts[1]
-                result = query_group_fund_history(group_name)
+                result = format_group_fund_history(group_name)
 
         elif text.startswith("刪除餐別"):
             parts = text.split()
             if len(parts) != 4:
-                result = "❗請提供格式：刪除餐別 [團名] [日期] [餐別]\n例：刪除餐別 大阪 2024/06/03 早餐"
+                result = "❗請提供格式：刪除餐別 [團名] [日期] [餐別]"
             else:
                 _, group_name, date_str, meal_name = parts
                 result = delete_group_meal(group_name, date_str, meal_name)
