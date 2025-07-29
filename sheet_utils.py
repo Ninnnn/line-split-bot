@@ -102,3 +102,37 @@ def format_group_fund_history(group_name):
         lines.append(f"{time} - {r['member']} {action} {r['amount']} 元")
 
     return "\n".join(lines)
+
+def reset_group_records(group_name):
+    group_sheet = get_worksheet("group_records")
+    records = group_sheet.get_all_records()
+    new_records = [r for r in records if r["group_name"] != group_name]
+
+    group_sheet.clear()
+    group_sheet.append_row(["timestamp", "group_name", "meal", "total", "split", "remark"])
+    for r in new_records:
+        group_sheet.append_row([
+            r["timestamp"],
+            r["group_name"],
+            r["meal"],
+            r["total"],
+            r["split"],
+            r.get("remark", ""),
+        ])
+
+    fund_sheet = get_worksheet("group_funds")
+    fund_records = fund_sheet.get_all_records()
+    new_fund_records = [r for r in fund_records if r["group_name"] != group_name]
+
+    fund_sheet.clear()
+    fund_sheet.append_row(["timestamp", "group_name", "member", "type", "amount"])
+    for r in new_fund_records:
+        fund_sheet.append_row([
+            r["timestamp"],
+            r["group_name"],
+            r["member"],
+            r["type"],
+            r["amount"]
+        ])
+
+    return f"✅ 已重設【{group_name}】的所有團體記帳與公費紀錄"
