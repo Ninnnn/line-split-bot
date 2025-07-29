@@ -86,3 +86,19 @@ def top_up_group_fund(group_name, records: dict):
     for name, amount in records.items():
         sheet.append_row([group_name, name, today, amount, '儲值'])
     return f"✅ 已為 {group_name} 儲值公費：{', '.join([f'{k}+{v}' for k, v in records.items()])}"
+
+def format_group_fund_history(group_name):
+    sheet = get_worksheet('group_funds')
+    records = sheet.get_all_records()
+    filtered = [r for r in records if r['group_name'] == group_name]
+
+    if not filtered:
+        return f"⚠️ 找不到 {group_name} 的公費紀錄"
+
+    lines = [f"📜【{group_name}】公費紀錄："]
+    for r in filtered:
+        time = r.get('timestamp') or r.get('time') or ''
+        action = "儲值" if r['type'] == '儲值' else "扣款"
+        lines.append(f"{time} - {r['member']} {action} {r['amount']} 元")
+
+    return "\n".join(lines)
