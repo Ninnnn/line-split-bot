@@ -71,3 +71,8 @@ def delete_group_meal(group, date_str, meal_name):
     sheet = get_worksheet(group)
     records = sheet.get_all_records()
     for idx, r in enumerate(records):
+        record_date = r.get("時間", "")[:10]
+        if record_date == date_str and r.get("餐別") == meal_name:
+            sheet.delete_rows(idx + 2)  # +2 是因為 get_all_records() 從第2列開始
+            return f"✅ 已刪除 {date_str} 的 {meal_name} 記錄"
+    return f"⚠️ 找不到 {date_str} 的 {meal_name} 記錄"
