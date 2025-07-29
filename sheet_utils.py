@@ -76,3 +76,13 @@ def delete_group_meal(group, date_str, meal_name):
             sheet.delete_rows(idx + 2)  # +2 是因為 get_all_records() 從第2列開始
             return f"✅ 已刪除 {date_str} 的 {meal_name} 記錄"
     return f"⚠️ 找不到 {date_str} 的 {meal_name} 記錄"
+
+def top_up_group_fund(group_name, records: dict):
+    """
+    儲值團體公費，records 是 dict 格式：{ '小明': 300, '小花': 200 }
+    """
+    sheet = get_worksheet('group_funds')
+    today = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    for name, amount in records.items():
+        sheet.append_row([group_name, name, today, amount, '儲值'])
+    return f"✅ 已為 {group_name} 儲值公費：{', '.join([f'{k}+{v}' for k, v in records.items()])}"
