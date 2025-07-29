@@ -136,3 +136,12 @@ def reset_group_records(group_name):
         ])
 
     return f"✅ 已重設【{group_name}】的所有團體記帳與公費紀錄"
+
+def format_group_fund_balance(balances):
+    result_lines = []
+    total_balance = 0
+    for name, amount in balances.items():
+        result_lines.append(f"{name}：{amount} 元")
+        total_balance += amount
+    result_lines.append(f"\n公費總額：{total_balance} 元")
+    return "\n".join(result_lines)
