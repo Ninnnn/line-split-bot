@@ -40,10 +40,14 @@ def split_group_expense(group, meal, total_amount, adjustments_list):
 
     adjustments = {}
     for adj in adjustments_list:
-        name, offset = re.match(r'(\D+)([+-]\d+)', adj).groups()
-        if name not in members:
-            return f"⚠️ 成員 {name} 不在團體中"
-        adjustments[name] = int(offset)
+        match = re.match(r'(\D+)([+-]\d+)', adj)
+        if not match:
+            return f"⚠️ 格式錯誤：{adj}，請使用『人名+金額』或『人名-金額』格式"
+
+    name, offset = match.groups()
+    if name not in members:
+        return f"⚠️ 成員 {name} 不在團體中"
+    adjustments[name] = int(offset)
 
     base_total = total_amount - sum(adjustments.values())
     share = base_total // len(members)
@@ -83,7 +87,7 @@ def top_up_group_fund(group_name, records: dict):
     儲值團體公費，records 是 dict 格式：{ '小明': 300, '小花': 200 }
     """
     sheet = get_worksheet('group_funds')
-    today = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    today = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     for name, amount in records.items():
         sheet.append_row([group_name, name, today, amount, '儲值'])
     return f"✅ 已為 {group_name} 儲值公費：{', '.join([f'{k}+{v}' for k, v in records.items()])}"
