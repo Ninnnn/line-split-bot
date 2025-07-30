@@ -145,3 +145,13 @@ def format_group_fund_balance(balances):
         total_balance += amount
     result_lines.append(f"\n公費總額：{total_balance} 元")
     return "\n".join(result_lines)
+
+def suggest_group_fund_topup(balances, target_balance=1000):
+    suggestions = []
+    for name, balance in balances.items():
+        topup = target_balance - balance
+        if topup > 0:
+            suggestions.append(f"{name} 建議儲值 {topup} 元")
+    if not suggestions:
+        return "所有成員的公費皆已達標 🎉"
+    return "💡 儲值建議：\n" + "\n".join(suggestions)
