@@ -160,3 +160,12 @@ def suggest_group_fund_topup(balances, target_balance=1000):
     if not suggestions:
         return "所有成員的公費皆已達標 🎉"
     return "💡 儲值建議：\n" + "\n".join(suggestions)
+
+def append_group_fund_record(group_name, member, amount, action_type):
+    """
+    將儲值或扣款紀錄新增到 group_funds 分頁。
+    action_type: '儲值' 或 'deduct'
+    """
+    sheet = get_worksheet("group_funds")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sheet.append_row([group_name, member, now, amount, action_type])
