@@ -29,9 +29,9 @@ def get_group_members(group_name):
     group_sheet = get_worksheet("groups")
     records = group_sheet.get_all_records()
     for r in records:
-        if r['group_name'] == group_name:
-            return r['members'].split(',')
-    return []
+        if r['group_name'].strip().lower() == group_name.strip().lower():
+            return [name.strip() for name in r['members'].split(',') if name.strip()]
+    raise Exception(f"找不到團體：{group_name}")
 
 def split_group_expense(group, meal, total_amount, adjustments_list):
     members = get_group_members(group)
