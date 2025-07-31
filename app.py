@@ -2,6 +2,7 @@ from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage
+import traceback
 import os
 import re
 from sheet_utils import (
@@ -144,6 +145,7 @@ def handle_message(event):
             result = f"❓ 無法識別的指令，請參考以下指令：\n\n{HELP_MESSAGE}"
 
     except Exception as e:
+        print("⚠️ Error:", traceback.format_exc())
         result = f"⚠️ 發生錯誤：{str(e)}"
 
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=result))
