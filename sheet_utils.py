@@ -44,10 +44,10 @@ def split_group_expense(group, meal, total_amount, adjustments_list):
         if not match:
             return f"⚠️ 格式錯誤：{adj}，請使用『人名+金額』或『人名-金額』格式"
 
-    name, offset = match.groups()
-    if name not in members:
-        return f"⚠️ 成員 {name} 不在團體中"
-    adjustments[name] = int(offset)
+        name, offset = match.groups()
+        if name not in members:
+            return f"⚠️ 成員 {name} 不在團體中"
+        adjustments[name] = int(offset)
 
     base_total = total_amount - sum(adjustments.values())
     share = base_total // len(members)
